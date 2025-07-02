@@ -1,8 +1,13 @@
 import numpy as np
-from scipy.signal import firwin, freqz, filtfilt
-from scipy import interpolate
 
-def bandpass(t,d,cutoff,numtaps=501,plot_ftf=False):
+try:
+    from cupyx.scipy.signal import firwin, freqz, filtfilt
+except ModuleNotFoundError:
+    from scipy.signal import firwin, freqz, filtfilt
+import matplotlib.pyplot as plt
+
+
+def bandpass(t, d, cutoff, numtaps=501, plot_ftf=False):
     """
     This function filters BES data using a non-causal FIR filter. The filter
     has linear phase response and is applied with a forwards-backwards
@@ -29,7 +34,7 @@ def bandpass(t,d,cutoff,numtaps=501,plot_ftf=False):
     """
 
     # Calculate FIR filter coefficients
-    fs = 1 / (t[1]-t[0])/1e3 #kHz
+    fs = 1 / (t[1] - t[0]) / 1e3  # kHz
     # bandpass filter; fs and cutoff frequency should have same unit
     b = firwin(numtaps, cutoff, pass_zero=False, fs=fs)
 
@@ -41,18 +46,18 @@ def bandpass(t,d,cutoff,numtaps=501,plot_ftf=False):
         phase = np.unwrap(np.angle(h))
 
         fig, ax1 = plt.subplots()
-        ax1.plot(freqs, mag_dB, 'b-')
-        ax1.set_xlabel('Frequency (kHz)')
-        ax1.set_ylabel('Amplitude (dB)', color='b')
+        ax1.plot(freqs, mag_dB, "b-")
+        ax1.set_xlabel("Frequency (kHz)")
+        ax1.set_ylabel("Amplitude (dB)", color="b")
         ax2 = ax1.twinx()
-        ax2.plot(freqs, phase, 'r')
-        ax2.set_ylabel('Phase (rad)', color='r')
-        ax1.set_title('Filter transfer function')
+        ax2.plot(freqs, phase, "r")
+        ax2.set_ylabel("Phase (rad)", color="r")
+        ax1.set_title("Filter transfer function")
         fig.tight_layout()
 
     # Filter signals
-#    filt_signals = signals.copy()  # avoid modifying input signals
+    #    filt_signals = signals.copy()  # avoid modifying input signals
     filt_signals = filtfilt(b, 1, d)
-#    filt_signals.settings.update({'cutoff_freqs': cutoff, 'numtaps': numtaps}) 
+    #    filt_signals.settings.update({'cutoff_freqs': cutoff, 'numtaps': numtaps})
 
     return filt_signals
