@@ -2,9 +2,9 @@ import numpy as np
 import matplotlib.pylab as plt
 from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import uniform_filter
-import sys
-sys.path.append('/home/duxiaodi/xpsi/py_commons')
-import create_structure as cs
+
+import bes_velocimetry.create_structure as cs
+
 def idl_interpolator(data,new_x,new_y):
     # Original grid
     xtmp = np.arange(data.shape[0])  # [0, 1, 2] (columns)
