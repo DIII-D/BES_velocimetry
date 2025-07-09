@@ -8,8 +8,6 @@ import sys
 from pathlib import Path
 import os
 
-from nvtx import annotate
-
 
 def process_imageset(args2):
     """
@@ -23,7 +21,6 @@ def process_imageset(args2):
     )
 
 
-@annotate("main", color="red")
 def main():
     parser = argparse.ArgumentParser(description="check bes")
     parser.add_argument(

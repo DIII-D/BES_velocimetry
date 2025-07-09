@@ -6,10 +6,6 @@ from scipy.ndimage import uniform_filter
 import bes_velocimetry.create_structure as cs
 
 
-from nvtx import annotate
-
-
-@annotate("idl_interpolator")
 def idl_interpolator(data,new_x,new_y):
     # Original grid
     xtmp = np.arange(data.shape[0])  # [0, 1, 2] (columns)
@@ -32,7 +28,6 @@ def idl_interpolator(data,new_x,new_y):
     Znew = interpolator0((new_xx,new_yy))    # Reshape to 2D
     return Znew.T
 
-@annotate("idl_interpolator2")
 def idl_interpolator2(ztmp,xnew2d,ynew2d):
     xtmp = np.arange(ztmp.shape[0])
     ytmp = np.arange(ztmp.shape[1])
@@ -45,7 +40,6 @@ def idl_interpolator2(ztmp,xnew2d,ynew2d):
     Znew = f(points).reshape(xnew2d.shape)
     return Znew
 
-@annotate("residual")
 def residual(strip, m=None):
     # Calculate residuals over defined area over the specified frames
     
@@ -73,7 +67,6 @@ def residual(strip, m=None):
                 # calculate the "local matching residue" with n = 1 (see Quenot)
     return res
 
-@annotate("Optimal_Path")
 def Optimal_Path(res, m, n):
     #res = res.transpose()
     # Determine the (or an) optimal path from those available.
@@ -142,7 +135,7 @@ def Optimal_Path(res, m, n):
     return i_coord, j_coord
     #return j_coord, i_coord
 
-@annotate("ODP")
+
 def ODP(image, nsteps=None, sm_param=15, m_frame=None, mx=None, my=None):
     image = image.astype(float)  # for improved accuracy
     n_frames = image.shape[0]
