@@ -21,11 +21,34 @@ def process_imageset(args2):
     )
 
 
+def default_output_path(output):
+    cscratch = os.getenv("CSCRATCH")
+    pscratch = os.getenv("PSCRATCH")
+    if output is not None:
+        out = Path(output)
+    elif cscratch is not None:
+        user = os.getenv("USER")
+        out = Path(cscratch) / user / "bes_velocimetry_outputs"
+    elif pscratch is not None:
+        out = Path(pscratch) / "bes_velocimetry_outputs"
+    else:
+        raise FileNotFoundError("No output path given")
+
+    try:
+        out.mkdir(parents=True, exist_ok=True)
+        return out
+    except FileNotFoundError:
+        raise
+    except OSError:
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser(description="check bes")
     parser.add_argument(
         "--fn", help="hdf5 file name as the input", type=str, required=True
     )
+    parser.add_argument("--out", help="Path for output file", type=str, default=None)
     parser.add_argument("--cores", help="number of codes", type=int, default=10)
     parser.add_argument("--nsteps", help="number of nsteps", type=int, default=5)
     parser.add_argument("--sm", help="number of sm_param", type=int, default=7)
@@ -41,6 +64,7 @@ def main():
     m_frame = args.m
     mx = args.mx
     my = args.my
+    out = default_output_path(args.out)
 
     fn = Path(args.fn)
     if not fn.exists():
@@ -100,8 +124,5 @@ def main():
     b.vy = vy_stacked
     b.time_v = time_v
 
-    # save_h5.from_object(b, path="./" + "vpara." + fn)
-    scratch = Path(os.getenv("SCRATCH"))
-    output = scratch / "hackathon" / "outputs" / f"vpara.{fn.name}"
-
+    output = out / f"vpara.{fn.name}"
     save_h5.from_object(b, path=output)
