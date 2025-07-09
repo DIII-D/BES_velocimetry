@@ -6,6 +6,9 @@ import argparse
 from multiprocessing import Pool
 import sys
 from pathlib import Path
+import os
+
+from nvtx import annotate
 
 
 def process_imageset(args2):
@@ -20,6 +23,7 @@ def process_imageset(args2):
     )
 
 
+@annotate("main", color="red")
 def main():
     parser = argparse.ArgumentParser(description="check bes")
     parser.add_argument(
@@ -99,4 +103,8 @@ def main():
     b.vy = vy_stacked
     b.time_v = time_v
 
-    save_h5.from_object(b, path="./" + "vpara." + fn)
+    # save_h5.from_object(b, path="./" + "vpara." + fn)
+    scratch = Path(os.getenv("SCRATCH"))
+    output = scratch / "hackathon" / "outputs" / f"vpara.{fn.name}"
+
+    save_h5.from_object(b, path=output)
