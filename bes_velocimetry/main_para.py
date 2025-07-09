@@ -16,12 +16,10 @@ def process_imageset(args2):
     # imageset,5 7,11,9,9
     imageset, nsteps, sm_param, m_frame, mx, my = args2
     print(imageset, nsteps, sm_param, m_frame, mx, my)
-    return odp_idl.ODP(
-        imageset, nsteps=nsteps, sm_param=sm_param, m_frame=m_frame, mx=mx, my=my
-    )
+    return odp_idl.ODP(imageset, nsteps=nsteps, sm_param=sm_param, m_frame=m_frame, mx=mx, my=my)
 
 
-def default_output_path(output):
+def default_output_path(output) -> Path:
     cscratch = os.getenv("CSCRATCH")
     pscratch = os.getenv("PSCRATCH")
     if output is not None:
@@ -32,29 +30,36 @@ def default_output_path(output):
     elif pscratch is not None:
         out = Path(pscratch) / "bes_velocimetry_outputs"
     else:
-        raise FileNotFoundError("No output path given")
+        raise FileNotFoundError("No output path given and no default for this system")
 
-    try:
-        out.mkdir(parents=True, exist_ok=True)
-        return out
-    except FileNotFoundError:
-        raise
-    except OSError:
-        raise
+    out.mkdir(parents=True, exist_ok=True)
+    return out
 
 
 def main():
     parser = argparse.ArgumentParser(description="check bes")
-    parser.add_argument(
-        "--fn", help="hdf5 file name as the input", type=str, required=True
-    )
+    parser.add_argument("--fn", help="hdf5 file name as the input", type=str, required=True)
     parser.add_argument("--out", help="Path for output file", type=str, default=None)
-    parser.add_argument("--cores", help="number of codes", type=int, default=10)
-    parser.add_argument("--nsteps", help="number of nsteps", type=int, default=5)
-    parser.add_argument("--sm", help="number of sm_param", type=int, default=7)
-    parser.add_argument("--m", help="number of m_frame", type=int, default=11)
-    parser.add_argument("--mx", help="number of mx", type=int, default=9)
-    parser.add_argument("--my", help="number of my", type=int, default=9)
+    parser.add_argument(
+        "--cores", help="number of cores, runs 20x faster on NERSC when set to 256", type=int, default=10
+    )
+    parser.add_argument(
+        "--nsteps",
+        help="number of iterations, could be optimized to stop based on change(error), fine for now.",
+        type=int,
+        default=5,
+    )
+    parser.add_argument(
+        "--sm", help="smoothing parameter (if memory serves), potential changes/updates TBD", type=int, default=7
+    )
+    parser.add_argument(
+        "--m",
+        help="frames to compare. larger is better, but math is worse. Simplest to evaluate against synthetic data",
+        type=int,
+        default=11,
+    )
+    parser.add_argument("--mx", help="Part of odp logic for optimal pathing", type=int, default=9)
+    parser.add_argument("--my", help="not used?", type=int, default=9)
 
     args = parser.parse_args()
 
@@ -83,22 +88,21 @@ def main():
     s_index_list = []
     e_index_list = []
     e_index = 0
-    for i in range(cores):
+    for i in range(cores):  # key dispatching logic where timeslices are dispersed across the compute
         # image_data2[i, :, :, :] = np.copy(b.image_data[ndim * i:ndim * (i + 1), :, :])
-        s_index = np.max([0, e_index - m_frame + 1])
+        s_index = np.max([0, e_index - m_frame + 1])  # actual timeslicing logic, start index, e is ending index
         e_index = s_index + ndim
+        # image data for the respective timeslice
         image_data2[i, :, :, :] = np.copy(b.image_data[s_index:e_index, :, :])
-        time_v[i, :] = np.copy(b.time[s_index : e_index - m_frame + 1])
-        s_index_list.append(s_index)
+        time_v[i, :] = np.copy(b.time[s_index : e_index - m_frame + 1])  # associated time vector for sliced images
+        s_index_list.append(s_index)  # top level index tracking
         e_index_list.append(e_index)
 
-    (Nt, Ny, Nx) = image_data2[0, :, :, :].shape  # Adjusted shape extraction
+    (Nt, Ny, Nx) = image_data2[0, :, :, :].shape
+    # Adjusted shape extraction, pulls dimensions of data prior to analysis
     #    nsteps = int(2 * np.log2(max(Nx, Ny) / 10) + 1)
     # Prepare arguments for parallel processing
-    process_args = [
-        (image_data2[i, :, :, :], nsteps, sm_param, m_frame, mx, my)
-        for i in range(cores)
-    ]
+    process_args = [(image_data2[i, :, :, :], nsteps, sm_param, m_frame, mx, my) for i in range(cores)]
 
     # Use multiprocessing to process the imagesets in parallel
     with Pool(cores) as pool:  # Adjust the number of processes as needed
@@ -114,9 +118,7 @@ def main():
         vy_all.append(vy)
         print(f"Processed imageset {i}: vx shape = {vx.shape}, vy shape = {vy.shape}")
     # Combine results from all processes along the frame axis
-    vx_stacked = np.concatenate(
-        vx_all, axis=0
-    )  # Combine all frames into a single array
+    vx_stacked = np.concatenate(vx_all, axis=0)  # Combine all frames into a single array
     vy_stacked = np.concatenate(vy_all, axis=0)
 
     print("------- SAVING FILES ------")

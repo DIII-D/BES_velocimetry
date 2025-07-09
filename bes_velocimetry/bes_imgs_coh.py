@@ -63,8 +63,9 @@ if __name__ == '__main__':
       xr = np.array([0.4,0.402])
    if shot == 200729:
       # case 1
-      xr = np.array([0.5,0.502])
-      cutoff = np.array([100,125])
+      xr = np.array([0.5,0.502])  #GOAL is to run from 0.3 to 2.0, ideally 5.0. Currently broken into 0.002 second blocks.
+      cutoff = np.array([100,125]) #cutoff for the bandpass filter, for initial analyses use [30,55] (kHz units). 
+      #Generally nothing above 300kHZ, generally 20-30 kHZ chunks are ideal fidelity.
       # case 2
       xr = np.array([0.7,0.702])
       # all taes
