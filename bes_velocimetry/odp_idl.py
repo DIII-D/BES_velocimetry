@@ -2,9 +2,10 @@ import numpy as np
 import matplotlib.pylab as plt
 from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import uniform_filter
-import sys
-sys.path.append('/home/duxiaodi/xpsi/py_commons')
-import create_structure as cs
+
+import bes_velocimetry.create_structure as cs
+
+
 def idl_interpolator(data,new_x,new_y):
     # Original grid
     xtmp = np.arange(data.shape[0])  # [0, 1, 2] (columns)
@@ -65,7 +66,6 @@ def residual(strip, m=None):
                 res[i,j]=res[i,j]+np.sum(window*np.abs(strip[k,:,i]-strip[k+1,:,j]))
                 # calculate the "local matching residue" with n = 1 (see Quenot)
     return res
-
 
 def Optimal_Path(res, m, n):
     #res = res.transpose()

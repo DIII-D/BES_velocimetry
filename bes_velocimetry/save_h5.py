@@ -35,7 +35,7 @@ def from_object(a,path = './'):
            f.create_dataset(dir(a)[i],data = a.__dict__[dir(a)[i]])
 
     f.close()
-    print('HDF FILE IS SAVED AS ' + path)
+    print(f'HDF FILE IS SAVED AS {path}')
     return
 
 
