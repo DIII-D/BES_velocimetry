@@ -26,12 +26,12 @@ def main():
     parser.add_argument(
         "--fn", help="hdf5 file name as the input", type=str, required=True
     )
-    parser.add_argument("--cores", help="number of codes", type=int, default=10)
-    parser.add_argument("--nsteps", help="number of nsteps", type=int, default=5)
-    parser.add_argument("--sm", help="number of sm_param", type=int, default=7)
-    parser.add_argument("--m", help="number of m_frame", type=int, default=11)
-    parser.add_argument("--mx", help="number of mx", type=int, default=9)
-    parser.add_argument("--my", help="number of my", type=int, default=9)
+    parser.add_argument("--cores", help="number of cores, runs 20x faster on NERSC when set to 256", type=int, default=10)
+    parser.add_argument("--nsteps", help="number of iterations, could be optimized to stop based on change(error), fine for now.", type=int, default=5) 
+    parser.add_argument("--sm", help="smoothing parameter (if memory serves), potential changes/updates TBD", type=int, default=7)
+    parser.add_argument("--m", help="frames to compare. larger is better, but math is worse. Simplest to evaluate against synthetic data", type=int, default=11)
+    parser.add_argument("--mx", help="Part of odp logic for optimal pathing", type=int, default=9)
+    parser.add_argument("--my", help="not used?", type=int, default=9)
 
     args = parser.parse_args()
 
@@ -59,16 +59,16 @@ def main():
     s_index_list = []
     e_index_list = []
     e_index = 0
-    for i in range(cores):
+    for i in range(cores): # key dispatching logic where timeslices are dispersed across the compute
         # image_data2[i, :, :, :] = np.copy(b.image_data[ndim * i:ndim * (i + 1), :, :])
-        s_index = np.max([0, e_index - m_frame + 1])
+        s_index = np.max([0, e_index - m_frame + 1]) #actual timeslicing logic, start index, e is ending index
         e_index = s_index + ndim
-        image_data2[i, :, :, :] = np.copy(b.image_data[s_index:e_index, :, :])
-        time_v[i, :] = np.copy(b.time[s_index : e_index - m_frame + 1])
-        s_index_list.append(s_index)
+        image_data2[i, :, :, :] = np.copy(b.image_data[s_index:e_index, :, :]) #image data for the respective timeslice
+        time_v[i, :] = np.copy(b.time[s_index : e_index - m_frame + 1]) #associated time vector for sliced images
+        s_index_list.append(s_index) #top level index tracking
         e_index_list.append(e_index)
 
-    (Nt, Ny, Nx) = image_data2[0, :, :, :].shape  # Adjusted shape extraction
+    (Nt, Ny, Nx) = image_data2[0, :, :, :].shape  # Adjusted shape extraction, pulls dimensions of data prior to analysis
     #    nsteps = int(2 * np.log2(max(Nx, Ny) / 10) + 1)
     # Prepare arguments for parallel processing
     process_args = [
