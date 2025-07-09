@@ -14,3 +14,9 @@ build-backend = "setuptools.build_meta"
 [project.scripts]
 bes-velocimetry = "bes_velocimetry:main_para"
 bes-hello = "bes_velocimetry:main"
+
+[tool.ruff]
+exclude = []
+line-length = 120
+indent-width = 4
+target-version = "py310"
