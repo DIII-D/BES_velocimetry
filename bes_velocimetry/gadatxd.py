@@ -5,7 +5,7 @@ import sys
 #import MDS_SERVER
 import sys
 sys.path.append('/home/duxiaodi/xpsi/py_commons')
-import create_structure as cs
+import bes_velocimetry.create_structure as cs
 
 def read(pn,shot,tree='d3d'):
     pointname = '\\'+pn
