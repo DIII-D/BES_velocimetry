@@ -1,5 +1,3 @@
-import sys
-import os
 import numpy as np
 import argparse
 import bes_velocimetry.create_structure as cs
@@ -8,9 +6,7 @@ import MDSplus
 
 '''
 Tasks:
-Rebake main array aggregation logic in for loop (don't make zero array and then stick in more stuff)
 Sort out filtering bad channels (can be manual list for prototyping purposes)
-Reimplement the masking logic (don't remember what it does, have resolved before)
 '''
 
 def ptdata(c, pn,shot):
@@ -20,9 +16,10 @@ def ptdata(c, pn,shot):
     return np.asarray(t/1e3),np.asarray(d) #guessing this modification to t is modification to gadatxd for BES?
 
 def main():
-    parser = argparse.ArgumentParser(description='check bes')
+    parser = argparse.ArgumentParser(description='Creates hdf5 file containing raw BES data.')
     parser.add_argument('--shot', help='shot number to get the data', type=int, required=True)
     #parser.add_argument('--ch', help='channel number to get the data', type=int, default=64) #should be an array eventually
+    parser.add_argument('--good-channels', help='triggers logic to filter which channels to use', default=False, type=bool, required=False)
     parser.add_argument("--out", help="Path for output file", type=str, default=None, required=True)
     args = parser.parse_args()
     shot = args.shot
@@ -59,11 +56,6 @@ def main():
     out.bes_r = bes_r
     out.bes_z = bes_z
     save_h5.from_object(out,path='./raw/bes.s'+str(shot)+'.h5')
-
-
-
-    #
-
 
 if __name__ == '__main__':
     main()
