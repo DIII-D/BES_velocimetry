@@ -55,7 +55,7 @@ def main():
     out.t_fdata = t_fdata
     out.bes_r = bes_r
     out.bes_z = bes_z
-    save_h5.from_object(out,path='./raw/bes.s'+str(shot)+'.h5')
+    save_h5.from_object(out,path=out_dir + 'raw/bes.s'+str(shot)+'.h5')
 
 if __name__ == '__main__':
     main()
