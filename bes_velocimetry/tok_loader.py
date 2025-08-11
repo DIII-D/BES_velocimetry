@@ -2,7 +2,12 @@ import numpy as np
 from toksearch import Pipeline, MdsSignal
 from toksearch_d3d import PtDataSignal
 import argparse
+import h5py
+import multiprocessing as mp
+from scipy.interpolate import Rbf
+import time as timelib
 
+import bes_velocimetry.bes_filter as bf
 import bes_velocimetry.create_structure as cs #These should be removed
 import bes_velocimetry.save_h5 as save_h5 #Once this is known to be sound/solid.
 
@@ -22,6 +27,7 @@ def raw_bes_pipeline(shots):
 
     return pipe
 
+
 def preprocessing_pipeline(shots):
     pipe = Pipeline(shots)
 
@@ -33,20 +39,133 @@ def preprocessing_pipeline(shots):
 
     return pipe   
 
+
+def time_interp(data, time, t_interp_factor):
+    """
+    Take time series data (n_ch, n_time) and interpolate over 
+    the new timabase
+    """
+    if t_interp_factor == 1:  # check if any interpolation needed
+        return data, time
+    nt_interp = t_interp_factor * (nt - 1) + 1  # new amount of points
+    n_ch = data.shape[0]
+    data_interp = np.zeros((n_ch, nt_interp))
+    ti = np.linspace(time[0], time[-1], num=nt_interp) # new timebase
+    for ch in range(n_ch):
+        data_interp[ch, :] = np.interp(ti, time, data[ch, :])
+    
+    return data_interp, ti
+
+
+def image_interp(R, Z, Ri, Zi, image_data):
+    """
+    Takes low-resolution (8x8) BES images and spatially interpolates them to
+    higher resolution. A cubic radial basis function algorithm
+    (scipy.interpolate.Rbf) is used to perform the interpolation.
+    """
+    rbf = Rbf(R, Z, image_data, function='cubic')
+    
+    return rbf(Ri, Zi)
+
+
+def make_images(image_data, R, Z, Ri, Zi):
+    """
+    Takes image_data array with shape (n_time, n_channels)
+    and returns the array of images with shape (n_time, nZ, nR)
+    """
+    n_frames = image_data.shape[0]
+    images = np.zeros((n_frames,) + Ri.shape)
+    cluster_CPU_cores = 16 
+    pool = mp.Pool(np.min([n_frames, cluster_CPU_cores]))
+    results = [pool.apply_async(image_interp, (R, Z, Ri, Zi, image_data[frame, :])) for frame in range(n_frames)]
+    pool.close()
+    for frame, result in enumerate(results):
+        while not result.ready():
+            timelib.sleep(0.05)
+        images[frame, :, :] = result.get()
+    
+    return images  # dimensions are (time, Z, R)!
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Creates hdf5 file using raw BES data from Toksearch.')
-    parser.add_argument('--shot', help='shot number to get the data', type=int, default=192095) #required=True)
+    parser.add_argument('--shot', help='shot number to get the data', type=int, default=199452) #required=True)
+    parser.add_argument('--times', help='time slice of interest', type=list, default=[2000, 2200]) #required=True)
     parser.add_argument('--good-channels', help='triggers logic to filter which channels to use', default=False, type=bool, required=False)
     parser.add_argument("--out", help="Path for output file", type=str, default=None, required=True)
     args = parser.parse_args()
     out_dir = args.out + "/"
-
-    #raw_bes_ds = raw_bes_pipeline([args.shot]).compute_serial()[0]
-    filter_ds = preprocessing_pipeline([args.shot]).compute_serial()[0]
+    
+    analysis_times = args.times
+    shot = args.shot
+    # Time interpolation factor
+    t_interp_factor = 1
+    # Frequency band of interest
+    cutoff_freqs = [20., 250.]
+    
+    print(f'\nLoading BES data for #{shot}')
+    raw_bes_ds = raw_bes_pipeline([shot]).compute_serial()[0]
+    filter_ds = preprocessing_pipeline([shot]).compute_serial()[0]
 
     #print(raw_bes_ds)
-    print(filter_ds)
+    #print(filter_ds)
+    # Put BES-fast data into np.array
+    bes_fast = np.array([raw_bes_ds['fast_ds'][var] for var in raw_bes_ds['fast_ds'].data_vars])  # shape (n_chan, n_time)
+    # Get the time base
+    bes_fast_time = raw_bes_ds['fast_ds']['times'].data
+    nt = bes_fast_time.shape[0]
+    dt = bes_fast_time[1] - bes_fast_time[0]
+
+    # Apply transfer functions first
+    data_filtered = bf.apply_transfer_functions(bes_fast, dt)
+    # Bandpass filter
+    data_filtered = bf.bandpass(data_filtered, dt, cutoff=cutoff_freqs, numtaps=501, plot_ftf=False)
+    # NBI filter
+    data_nbi = bf.filter_nbi(data_filtered, bes_fast_time, filter_ds,
+                             analysis_times=analysis_times, keep_nans=True)  # sets useless data to nans
+    # Find bad channel numbers
+    data_list, time_list, bad_channels_list = bf.find_bad_channels(data_nbi, bes_fast_time, threshold_low=6e-4)
+    print(f'Found {len(data_list)} time slices')
+    print(f'Corresponding bad channes: {bad_channels_list}')
+
+    # Get R, Z coordinates
+    R = filter_ds['bes_r']['data']
+    Z = filter_ds['bes_z']['data']
+    # Define the interpolation grid in R, Z
+    res = [40, 40]  # image resolution after interpolation [nR, nZ]
+    ch_width, ch_height = 0.8, 1.1  # channel radial width and poloidal height
+    R0 = min(R) - ch_width / 2
+    R1 = max(R) + ch_width / 2
+    Z0 = min(Z) - ch_height / 2
+    Z1 = max(Z) + ch_height / 2
+    # Default indexing in meshgrid is 'xy'
+    Ri, Zi = np.meshgrid(np.linspace(R0, R1, num=res[0]), np.linspace(Z0, Z1, num=res[1]))
+    
+    # For each time slice: oversample signals in time, create images and save them to hdf5
+    for data, time in zip(data_list, time_list):
+        fname = args.out + f'/{shot}_{time[0]:.2f}-{time[-1]:.2f}.h5'
+        print('Processing: ' + fname)
+        # Print std to campare with OMFIT
+        stds = np.nanstd(data, axis=1)
+        print('STD for each channel: ', stds)
+        # Interpolate time and data over new timebase
+        data_final, ti = time_interp(data, time, t_interp_factor)
+        # Normalize data by rms amplitude
+        data_final = data_final / np.std(data_final, axis=1, keepdims=True)
+        # Transpose array to make it (n_time, n_channels) 
+        image_data = data_final.T  
+        # Create images array with dimensions (n_time, nZ, nR)
+        images = make_images(image_data, R, Z, Ri, Zi)
+        print(f'Images array shape: {images.shape}')
+        # Write interpolated images to hdf5 file
+        with h5py.File(fname, 'w') as hf:
+            hf.create_dataset('images', data=images)
+            hf.create_dataset('time', data=ti)
+            hf.create_dataset('R', data=Ri[0, :])
+            hf.create_dataset('Z', data=Zi[:, 0])
+        print('Saved images: ' + fname)
+
 
     #All logic from here on will need some kind of modification either to make usage of the xarray data
     #(which would make code using MDSplus calls directly incompatible) or to extract and feed it into existing code.
