@@ -137,8 +137,9 @@ if __name__ == "__main__":
         bad_channels = bf.find_bad_channels(data)
         print(f'Found bad channesl: {[ch+1 for ch in bad_channels]}') # channels numbers start from 1
         # remove bad channels from data and R, Z arrays
-        for arr in [data, R, Z]:
-            np.delete(arr, bad_channels, axis=0)
+        data = np.delete(data, bad_channels, axis=0)
+        R = np.delete(R, bad_channels, axis=0)
+        Z = np.delete(Z, bad_channels, axis=0)
         # Print std to compare with OMFIT
         stds = np.nanstd(data, axis=1)
         print('STD for each channel: ', stds)
