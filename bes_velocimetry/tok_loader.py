@@ -92,6 +92,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Creates hdf5 file using raw BES data from Toksearch.')
     parser.add_argument('--shot', help='shot number to get the data', type=int, default=199452) #required=True)
     parser.add_argument('--times', help='time slice of interest', type=list, default=[2000, 2200]) #required=True)
+    parser.add_argument('--fband', help='frequency band of interest', type=list, default=[20., 250.]) #required=True)
+    parser.add_argument('--time_interp', help='time interpolation factor', type=int, default=1) #required=True)
+    parser.add_argument('--res', help='image resolution after spatial interpolation', type=list, default=[40, 40]) #required=True)
     parser.add_argument('--good-channels', help='triggers logic to filter which channels to use', default=False, type=bool, required=False)
     parser.add_argument("--out", help="Path for output file", type=str, default=None, required=True)
     args = parser.parse_args()
@@ -99,10 +102,9 @@ if __name__ == "__main__":
     
     analysis_times = args.times
     shot = args.shot
-    # Time interpolation factor
-    t_interp_factor = 1
-    # Frequency band of interest
-    cutoff_freqs = [20., 250.]
+    t_interp_factor = args.time_interp  # Time interpolation factor
+    cutoff_freqs = args.fband  # Frequency band of interest
+    res = args.res  # image resolution after interpolation [nR, nZ]
     
     print(f'\nLoading BES data for #{shot}')
     raw_bes_ds = raw_bes_pipeline([shot]).compute_serial()[0]
@@ -110,30 +112,14 @@ if __name__ == "__main__":
 
     #print(raw_bes_ds)
     #print(filter_ds)
-    # Put BES-fast data into np.array
-    bes_fast = np.array([raw_bes_ds['fast_ds'][var] for var in raw_bes_ds['fast_ds'].data_vars])  # shape (n_chan, n_time)
-    # Get the time base
-    bes_fast_time = raw_bes_ds['fast_ds']['times'].data
-    nt = bes_fast_time.shape[0]
-    dt = bes_fast_time[1] - bes_fast_time[0]
-
-    # Apply transfer functions first
-    data_filtered = bf.apply_transfer_functions(bes_fast, dt)
-    # Bandpass filter
-    data_filtered = bf.bandpass(data_filtered, dt, cutoff=cutoff_freqs, numtaps=501, plot_ftf=False)
-    # NBI filter
-    data_nbi = bf.filter_nbi(data_filtered, bes_fast_time, filter_ds,
-                             analysis_times=analysis_times, keep_nans=True)  # sets useless data to nans
-    # Find bad channel numbers
-    data_list, time_list, bad_channels_list = bf.find_bad_channels(data_nbi, bes_fast_time, threshold_low=6e-4)
+    # Filter and slice data
+    data_list, time_list = bf.filter_bes(raw_bes_ds, filter_ds, cutoff_freqs, analysis_times)
     print(f'Found {len(data_list)} time slices')
-    print(f'Corresponding bad channes: {bad_channels_list}')
 
     # Get R, Z coordinates
     R = filter_ds['bes_r']['data']
     Z = filter_ds['bes_z']['data']
     # Define the interpolation grid in R, Z
-    res = [40, 40]  # image resolution after interpolation [nR, nZ]
     ch_width, ch_height = 0.8, 1.1  # channel radial width and poloidal height
     R0 = min(R) - ch_width / 2
     R1 = max(R) + ch_width / 2
@@ -142,11 +128,18 @@ if __name__ == "__main__":
     # Default indexing in meshgrid is 'xy'
     Ri, Zi = np.meshgrid(np.linspace(R0, R1, num=res[0]), np.linspace(Z0, Z1, num=res[1]))
     
-    # For each time slice: oversample signals in time, create images and save them to hdf5
+    # For each time slice: detect bad channels, oversample signals in time, 
+    # create images and save them to hdf5
     for data, time in zip(data_list, time_list):
         fname = args.out + f'/{shot}_{time[0]:.2f}-{time[-1]:.2f}.h5'
         print('Processing: ' + fname)
-        # Print std to campare with OMFIT
+        # find bad channels indices
+        bad_channels = bf.find_bad_channels(data)
+        print(f'Found bad channesl: {[ch+1 for ch in bad_channels]}') # channels numbers start from 1
+        # remove bad channels from data and R, Z arrays
+        for arr in [data, R, Z]:
+            np.delete(arr, bad_channels, axis=0)
+        # Print std to compare with OMFIT
         stds = np.nanstd(data, axis=1)
         print('STD for each channel: ', stds)
         # Interpolate time and data over new timebase

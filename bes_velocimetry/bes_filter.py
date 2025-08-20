@@ -76,16 +76,17 @@ def apply_transfer_functions(data, dt):
     length = data.shape[1]
     data = np.fft.rfft(data)
     freqs = np.fft.rfftfreq(length, d=dt)  # kHz
-    splines = interpolate.interp1d(tf_frequency, tf_data, kind='cubic', fill_value='extrapolate')
+    #print(tf_frequency.shape, tf_data.shape)
+    splines = interpolate.CubicSpline(tf_frequency, tf_data, axis=1, extrapolate=True)
     data = np.fft.irfft(data / np.sqrt(np.abs(splines(freqs))), n=length)
 
     return data
 
 
-def filter_nbi(data, sig_time, filter_ds, analysis_times=[0, 9500], keep_nans=False):
+def filter_nbi(data, sig_time, filter_ds, analysis_times=[0, 9500]):
     """
-    keeps data only at times when the viewed 150 beam is on
-    and another one is off, the viewed beam is determined from
+    Slice the data based on when the viewed 150 beam is on
+    and another 150 beam is off. The viewed beam is determined from
     mds parameter 'BES::TOP.BEAM'
 
     Parameters
@@ -93,18 +94,14 @@ def filter_nbi(data, sig_time, filter_ds, analysis_times=[0, 9500], keep_nans=Fa
     data : ndarray
     sig_time : ndarray
         data timebase
-    device : string
-    shot: int
     analysis_times: list
         list with start and finish time
-    keep_nans : bool
-        If True, then the resulting data array has all the data points,
-        but the data during vieved beam off (or both beams on) time is set to np.nan
-        If keep_nans=False, then the data during vieved beam off (or both beams on) time
-        is removed from the data array
     Returns
     =======
-    data : ndarray
+    data_list : list
+        list of np arrays with data
+    time_list : list
+        list of np arrays with time
     """
 
     print('\nFiltering NBI modulation')
@@ -122,7 +119,7 @@ def filter_nbi(data, sig_time, filter_ds, analysis_times=[0, 9500], keep_nans=Fa
         odd_beam = filter_ds['pinj_15r']['data']
         print('BES focused on 150-LEFT')
     else:
-        raise OMFITexception('Cannot determine which DIII-D beam is being viewed.')
+        print('Cannot determine which DIII-D beam is being viewed.')
     # Take beam data at analysis_times
     dt = beam_time[1] - beam_time[0]
     tmin, tmax = analysis_times
@@ -132,34 +129,22 @@ def filter_nbi(data, sig_time, filter_ds, analysis_times=[0, 9500], keep_nans=Fa
     odd_beam = odd_beam[mask]
     # Set up times when only viewed beam is on
     selected_times = beam_time[(viewed_beam > 1e4) & (odd_beam < 1e4)][1:-1]
+    # Find times indices when only viewed beam is on
     indices = np.where(selected_times[1:] - selected_times[0:-1] > 2 * dt)[0]
     indices_start = np.insert(indices + 1, 0, 0)
     indices_end = np.insert(indices, len(indices), len(selected_times) - 1)
-    # Break time sequence into pairs [start_time, end_time]
-    # Remove 2 ms at the beginning and 0.5 ms at the end of each NBI blip
-    selected_times_filtered = [[selected_times[x] + 2, selected_times[y] - 0.5] for x, y in zip(indices_start, indices_end)]
-    # Find indices of data points at times when only viewed beam is on
-    time_indices = []
-    for time_range in selected_times_filtered:
-        tmin, tmax = time_range
-        time_indices += np.where((sig_time > tmin) & (sig_time < tmax))[0].tolist()
-    # Filter data using the found indices
-    print(f'Detected {len(selected_times_filtered)} NBI blip(s)')
-    # print('selected times after filtering NBI modulation: ', selected_times_filtered)
-    # print('Total amount of data points: {}'.format(len(data.shape[1])))
-    if keep_nans:
-    	# Set data values during beam off (or both beams on) times to np.nan
-        time_mask = np.zeros_like(sig_time, dtype=bool)
-        time_mask[time_indices] = True
-        data[:, ~time_mask] = np.nan
-        print('Data during beam off times is set to NaN\n')
-    else:
-    	# Remove data values during beam off (or both beams on) times
-        data = data[:, time_indices]
-        print('Data during beam off times removed from the array\n')
-    # print('Amount of data points after filtering NBI modulation: {}'.format(len(data.shape[1])))
+    # Slice data and time based on indices and put slices into lists
+    data_list = []
+    time_list = []
+    for i_start, i_stop in zip(indices_start, indices_end):
+        # Remove 2 ms at the beginning and 0.5 ms at the end of each NBI blip
+        tmin, tmax = selected_times[i_start] + 2, selected_times[i_stop] - 0.5
+        time_indices = np.where((sig_time > tmin) & (sig_time < tmax))[0]
+        time_list.append(sig_time[time_indices])
+        data_list.append(data[:, time_indices])
+    print(f'Detected {len(data_list)} NBI blip(s)')
 
-    return data
+    return data_list, time_list
 
 
 def modified_zscore(data):
@@ -169,41 +154,42 @@ def modified_zscore(data):
     return modified_z
 
 
-def find_bad_channels(data, time, threshold_low=0.005, threshold_high=0.1):
+def find_bad_channels(data):
     '''
-    The function works with NBI-filtered data where NBI-off times are set to nans
-    It breaks data into time slices removing nans
+    The function works with a data time slice.
     For bad channels check - simple logic - check the modified Z-score
-    Returns list of data and time slices, and lists of bad channels for each time slice
+    Returns a list of bad channel indices (starting from 0)
     '''
-    data_list = []
-    time_list = []
-    bad_channels_list = []
-    # Check if data has nans first
-    if not np.isnan(data).any():
-        # If no nans found, don't slice the data
-        data_list.append(data)
-        time_list.append(time)
-    else:
-        # If nans found, slice data to remove all nans
-        # Check for nan in the 1st channel
-        mask = ~np.isnan(data[0, :])
-        # Find start and end indices of non-nan data segments
-        diff = np.diff(np.concatenate(([False], mask, [False])).astype(int))
-        starts = np.where(diff == 1)[0]
-        ends = np.where(diff == -1)[0]
-        # Extract each continuous data segment
-        for start, end in zip(starts, ends):
-            data_list.append(data[:, start:end])
-            time_list.append(time[start:end])
-    #print(f'found {len(data_list)} data slice(s)')
-    # For each data slice find bad channels
-    for data_slice in data_list:
-        std = np.nanstd(data_slice, axis=1)  # calculate std over the time axis
-        score = np.abs(modified_zscore(np.log(1e3*std + 1e-3)))
-        bad_channels = np.where(score > 2.5)[0] + 1
-        #bad_channels = np.where((std < threshold_low)|(std > threshold_high))[0] + 1  # channel numbers start from 1
-        bad_channels_list.append(bad_channels.tolist())
-
-    return data_list, time_list, bad_channels_list
+    std = np.nanstd(data, axis=1)  # calculate std over the time axis
+    score = np.abs(modified_zscore(np.log(1e3*std + 1e-3)))
+    bad_channels = np.where(score > 2.5)[0]  # these are channel indices, start from 0
     
+    return bad_channels.tolist()
+
+
+def filter_bes(bes_ds, filter_ds, cutoff_freqs, analysis_times):
+    '''
+    The function takes xarray dataset with BES data, applies trasfer fucntions and filteing,
+    and slices data based on NBI timing
+    
+    Returns 
+    data_list : list
+        list with data np.arrays, 
+    time_list : list 
+        list with time np.arrays 
+    '''
+    # Put BES-fast data into np.array
+    bes_fast = np.array([bes_ds['fast_ds'][var] for var in bes_ds['fast_ds'].data_vars])  # shape (n_chan, n_time)
+    # Get the time base
+    bes_fast_time = bes_ds['fast_ds']['times'].data
+    nt = bes_fast_time.shape[0]
+    dt = bes_fast_time[1] - bes_fast_time[0]
+    # Apply transfer functions first
+    data_filtered = apply_transfer_functions(bes_fast, dt)
+    # Bandpass filter
+    data_filtered = bandpass(data_filtered, dt, cutoff=cutoff_freqs, numtaps=501, plot_ftf=False)
+    # NBI filter
+    data_list, time_list = filter_nbi(data_filtered, bes_fast_time, filter_ds,
+                                      analysis_times=analysis_times)  
+   
+    return data_list, time_list
