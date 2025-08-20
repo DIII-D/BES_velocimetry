@@ -133,16 +133,16 @@ if __name__ == "__main__":
     for data, time in zip(data_list, time_list):
         fname = args.out + f'/{shot}_{time[0]:.2f}-{time[-1]:.2f}.h5'
         print('Processing: ' + fname)
+        # Print std to compare with OMFIT
+        stds = np.nanstd(data, axis=1)
+        print('STD for each channel: ', stds)
         # find bad channels indices
         bad_channels = bf.find_bad_channels(data)
         print(f'Found bad channesl: {[ch+1 for ch in bad_channels]}') # channels numbers start from 1
         # remove bad channels from data and R, Z arrays
         data = np.delete(data, bad_channels, axis=0)
-        R = np.delete(R, bad_channels, axis=0)
-        Z = np.delete(Z, bad_channels, axis=0)
-        # Print std to compare with OMFIT
-        stds = np.nanstd(data, axis=1)
-        print('STD for each channel: ', stds)
+        R_clean = np.delete(R, bad_channels, axis=0)
+        Z_clean = np.delete(Z, bad_channels, axis=0)
         # Interpolate time and data over new timebase
         data_final, ti = time_interp(data, time, t_interp_factor)
         # Normalize data by rms amplitude
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         # Transpose array to make it (n_time, n_channels) 
         image_data = data_final.T  
         # Create images array with dimensions (n_time, nZ, nR)
-        images = make_images(image_data, R, Z, Ri, Zi)
+        images = make_images(image_data, R_clean, Z_clean, Ri, Zi)
         print(f'Images array shape: {images.shape}')
         # Write interpolated images to hdf5 file
         with h5py.File(fname, 'w') as hf:
