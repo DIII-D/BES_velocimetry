@@ -68,15 +68,14 @@ def image_interp(R, Z, Ri, Zi, image_data):
     return rbf(Ri, Zi)
 
 
-def make_images(image_data, R, Z, Ri, Zi):
+def make_images(image_data, R, Z, Ri, Zi, cpu_cores):
     """
     Takes image_data array with shape (n_time, n_channels)
     and returns the array of images with shape (n_time, nZ, nR)
     """
     n_frames = image_data.shape[0]
     images = np.zeros((n_frames,) + Ri.shape)
-    cluster_CPU_cores = 16 
-    pool = mp.Pool(np.min([n_frames, cluster_CPU_cores]))
+    pool = mp.Pool(np.min([n_frames, cpu_cores]))
     results = [pool.apply_async(image_interp, (R, Z, Ri, Zi, image_data[frame, :])) for frame in range(n_frames)]
     pool.close()
     for frame, result in enumerate(results):
@@ -91,9 +90,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Creates hdf5 file using raw BES data from Toksearch.')
     parser.add_argument('--shot', help='shot number to get the data', type=int, default=199452) #required=True)
-    parser.add_argument('--times', help='time slice of interest', type=list, default=[2000, 2200]) #required=True)
-    parser.add_argument('--fband', help='frequency band of interest', type=list, default=[20., 250.]) #required=True)
+    parser.add_argument('--times', help='time slice of interest, of form --times START STOP (in milliseconds)', type=int, nargs=2, default=[2000, 2200]) #required=True)
+    parser.add_argument('--fband', help='frequency band of interest', type=int, nargs=2 ,default=[20, 250]) #required=True)
     parser.add_argument('--time_interp', help='time interpolation factor', type=int, default=1) #required=True)
+    parser.add_argument('--cpu_cores', help='Number of CPUs for parallelism when interpolating', type=int, default=8) #required=True)
     parser.add_argument('--res', help='image resolution after spatial interpolation', type=list, default=[40, 40]) #required=True)
     parser.add_argument('--good-channels', help='triggers logic to filter which channels to use', default=False, type=bool, required=False)
     parser.add_argument("--out", help="Path for output file", type=str, default=None, required=True)
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         # Transpose array to make it (n_time, n_channels) 
         image_data = data_final.T  
         # Create images array with dimensions (n_time, nZ, nR)
-        images = make_images(image_data, R_clean, Z_clean, Ri, Zi)
+        images = make_images(image_data, R_clean, Z_clean, Ri, Zi, args.cpu_cores)
         print(f'Images array shape: {images.shape}')
         # Write interpolated images to hdf5 file
         with h5py.File(fname, 'w') as hf:
