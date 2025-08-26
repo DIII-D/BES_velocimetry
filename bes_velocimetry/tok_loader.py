@@ -118,7 +118,8 @@ if __name__ == "__main__":
 
     # Get R, Z coordinates
     R = filter_ds['bes_r']['data']
-    Z = filter_ds['bes_z']['data']
+    Z = filter_ds['bes_z']['data'] * -1. # Z-axis is inverted in the tree
+    #print(R, Z)
     # Define the interpolation grid in R, Z
     ch_width, ch_height = 0.8, 1.1  # channel radial width and poloidal height
     R0 = min(R) - ch_width / 2
@@ -133,9 +134,10 @@ if __name__ == "__main__":
     for data, time in zip(data_list, time_list):
         fname = args.out + f'/{shot}_{time[0]:.2f}-{time[-1]:.2f}.h5'
         print('Processing: ' + fname)
+        print('t_min, t_max: ', time[0], time[-1])
         # Print std to compare with OMFIT
-        stds = np.nanstd(data, axis=1)
-        print('STD for each channel: ', stds)
+        #stds = np.nanstd(data, axis=1)
+        #print('STD for each channel: ', stds)
         # find bad channels indices
         bad_channels = bf.find_bad_channels(data)
         print(f'Found bad channesl: {[ch+1 for ch in bad_channels]}') # channels numbers start from 1
@@ -151,7 +153,6 @@ if __name__ == "__main__":
         image_data = data_final.T  
         # Create images array with dimensions (n_time, nZ, nR)
         images = make_images(image_data, R_clean, Z_clean, Ri, Zi, args.cpu_cores)
-        print(f'Images array shape: {images.shape}')
         # Write interpolated images to hdf5 file
         with h5py.File(fname, 'w') as hf:
             hf.create_dataset('images', data=images)
