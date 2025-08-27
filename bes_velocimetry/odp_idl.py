@@ -168,10 +168,8 @@ def ODP(image, nsteps=None, sm_param=15, m_frame=None, mx=None, my=None):
     iy = np.arange(ny)
 
     ret = ""
-    #print("   frame    step x-width y-width x-steps y-steps      mx      my  smooth")
+    print("frame x-width y-width x_steps y_steps mx my smooth")
     for frame in range(n_frames-m_frame+1):
-        print('------------------------')
-        print('frame: ',frame)
         vx_work = np.zeros((ny, nx))  # temporary array for v_x
         vy_work = np.zeros((ny, nx))  # temporary array for v_y
 
@@ -194,7 +192,10 @@ def ODP(image, nsteps=None, sm_param=15, m_frame=None, mx=None, my=None):
             temp_y = np.zeros((y_steps,ny))  # temporary array to hold y-shift results
             temp_y1 = np.zeros(ny)
             temp_y2 = np.zeros(ny)
-
+            
+            if frame % 100 == 0:
+                print(frame, x_width, y_width, x_steps, y_steps, mx, my, sm_param)
+            
             for x_index in range(x_steps):  # cycle through "horizontal" strips
                 #strip = image[:, x_index * x_width // 2:x_index * x_width // 2 + x_width - 1, frame: frame + m_frame]
         #        strip = image_warp[int(frame): int(frame + m_frame), x_index * x_width // 2:x_index * x_width // 2 + x_width,:]
@@ -259,10 +260,6 @@ def ODP(image, nsteps=None, sm_param=15, m_frame=None, mx=None, my=None):
 #                          plt.subplot(11,1,i+1)
 #                          plt.pcolormesh(d.strip[i,:,:])
 
-
-
-
-
                 res = residual(strip, m=my)
 #                print('optimal path my,ny',my,ny)
                 i_coord, j_coord = Optimal_Path(res, my, ny)
@@ -299,7 +296,7 @@ def ODP(image, nsteps=None, sm_param=15, m_frame=None, mx=None, my=None):
             mx = int(max(np.floor((mx / np.sqrt(2.0) + 0.0) / 2.0) * 2 + 1, 3))
             my = int(max(np.floor((my / np.sqrt(2.0) + 0.0) / 2.0) * 2 + 1, 3))
             sm_param = int(max(sm_param - 2, 5))
-            print(x_width,y_width,mx,my,sm_param)
+
             # debug mode 
 #            if frame == 1:
 #               if steps == 4:    
