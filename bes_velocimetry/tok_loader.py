@@ -7,9 +7,10 @@ import multiprocessing as mp
 from scipy.interpolate import Rbf
 import time as timelib
 
+#import bes_filter as bf
 import bes_velocimetry.bes_filter as bf
-import bes_velocimetry.create_structure as cs #These should be removed
-import bes_velocimetry.save_h5 as save_h5 #Once this is known to be sound/solid.
+#import bes_velocimetry.create_structure as cs #These should be removed
+#import bes_velocimetry.save_h5 as save_h5 #Once this is known to be sound/solid.
 
 
 def raw_bes_pipeline(shots):
@@ -121,7 +122,7 @@ if __name__ == "__main__":
     Z = filter_ds['bes_z']['data'] * -1. # Z-axis is inverted in the tree
     #print(R, Z)
     # Define the interpolation grid in R, Z
-    ch_width, ch_height = 0.8, 1.1  # channel radial width and poloidal height
+    ch_width, ch_height = 0.8, 1.1  # channel radial width and poloidal height in cm
     R0 = min(R) - ch_width / 2
     R1 = max(R) + ch_width / 2
     Z0 = min(Z) - ch_height / 2

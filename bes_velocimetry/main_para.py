@@ -1,12 +1,16 @@
 import bes_velocimetry.create_structure as cs
 import bes_velocimetry.save_h5 as save_h5
-import numpy as np
 import bes_velocimetry.odp_idl as odp_idl
+#import create_structure as cs
+#import save_h5 as save_h5
+#import odp_idl as odp_idl
+import numpy as np
 import argparse
 from multiprocessing import Pool
 import sys
 from pathlib import Path
 import os
+import time
 
 
 def process_imageset(args2):
@@ -42,6 +46,7 @@ def reduce_spatial_res(vx, vy, R, Z, res_out):
     R, Z have shapes nx, ny
     res_out is a list with new [nx, ny]
     '''
+    nt, ny, nx = vx.shape
     nx_out, ny_out = res_out  # resolution of the output velocity array
     px = nx // nx_out
     py = ny // ny_out
@@ -53,13 +58,12 @@ def reduce_spatial_res(vx, vy, R, Z, res_out):
     for j in range(ny_out):
         Z_down[j] = Z[j * py : (j + 1) * py].mean()
     # downsample velocity
-    nt = vx_stacked.shape[0]
     vx_down = np.zeros((nt, ny_out, nx_out))
     vy_down = np.zeros((nt, ny_out, nx_out))
     for i in range(ny_out):
         for j in range(nx_out):
-            vx_sub = vx_stacked[:, i * py : (i + 1) * py, j * px : (j + 1) * px]
-            vy_sub = vy_stacked[:, i * py : (i + 1) * py, j * px : (j + 1) * px]
+            vx_sub = vx[:, i * py : (i + 1) * py, j * px : (j + 1) * px]
+            vy_sub = vy[:, i * py : (i + 1) * py, j * px : (j + 1) * px]
             vx_down[:, i, j] = vx_sub.mean(axis=(1, 2))
             vy_down[:, i, j] = vy_sub.mean(axis=(1, 2))
     return vx_down, vy_down, R_down, Z_down
@@ -92,6 +96,8 @@ if __name__ == '__main__': # main():
     parser.add_argument("--res_out", help="output spatial resolution", type=int, nargs=2, default=[8, 8])
 
     args = parser.parse_args()
+
+    t1 = time.time()
 
     cores = args.cores
     nsteps = args.nsteps
@@ -160,7 +166,9 @@ if __name__ == '__main__': # main():
 
     # Downsample back to 8x8 resolution
     vx_down, vy_down, R_down, Z_down = reduce_spatial_res(vx_stacked, vy_stacked, b.R, b.Z, res_out)
-
+    
+    t2 = time.time()
+    print(f'exec time: {t2-t1} s')
     print("------- SAVING FILES ------")
     b.vx = vx_stacked
     b.vy = vy_stacked
@@ -168,7 +176,7 @@ if __name__ == '__main__': # main():
     b.vy_down = vy_down
     b.R_down = R_down
     b.Z_down = Z_down
-    b.time_v = time_v
+    b.time_v = time_v.flatten()
 
     output = out / f"vpara.{fn.name}"
     save_h5.from_object(b, path=output)
