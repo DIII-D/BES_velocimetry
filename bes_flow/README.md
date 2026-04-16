@@ -2,6 +2,18 @@
 
 Neural network optical flow for Beam Emission Spectroscopy (BES) plasma diagnostics.
 
+## How to run
+pip install -e .
+
+Generate raw images
+python -m bes_flow.tok_loader --shot 194313 --times 2620 2640 --fband 30 200 --res 64 64 --exclude_channels 6 13 19 48 51 58 --out 'raw_data'
+
+Specify raw data path in config.py: cfg.data_path
+
+Run training
+For curriculum training (all 4 flow types one after another) set cfg.num_epochs=100 or more
+python -m bes_flow.train --curriculum --model 'pwc'
+
 ## Project structure
 
 ```

@@ -70,7 +70,7 @@ def apply_transfer_functions(data, dt):
     dt : float
     """
     # Load transfer functions
-    tf = np.loadtxt("133298_tf.csv", delimiter=",")
+    tf = np.loadtxt("bes_flow/133298_tf.csv", delimiter=",")
     tf_data = tf[1:, :]  # 0th row is freq
     tf_frequency = tf[0, :] / 1000.0  # Hz -> kHz
     # Apply to data
@@ -169,7 +169,7 @@ def find_bad_channels(data):
     return bad_channels.tolist()
 
 
-def filter_bes(bes_ds, filter_ds, cutoff_freqs, analysis_times):
+def filter_bes(bes_ds, filter_ds, cutoff_freqs, analysis_times, filter_nbi=True):
     '''
     The function takes xarray dataset with BES data, applies trasfer fucntions and filteing,
     and slices data based on NBI timing
@@ -191,7 +191,8 @@ def filter_bes(bes_ds, filter_ds, cutoff_freqs, analysis_times):
     # Bandpass filter
     data_filtered = bandpass(data_filtered, dt, cutoff=cutoff_freqs, numtaps=501, plot_ftf=False)
     # NBI filter
-    data_list, time_list = filter_nbi(data_filtered, bes_fast_time, filter_ds,
-                                      analysis_times=analysis_times)  
+    if filter_nbi:
+        data_list, time_list = filter_nbi(data_filtered, bes_fast_time, filter_ds,
+                                        analysis_times=analysis_times)  
    
     return data_list, time_list

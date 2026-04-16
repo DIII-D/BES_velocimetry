@@ -11,7 +11,7 @@ class Config:
     # --- Data ------------------------------------------------------------
     # Path to the NumPy array of raw BES frames, shape (N, 64, 64).
     # Each frame is a single 2-D snapshot of plasma density fluctuations.
-    data_path: str = "raw_data/194313_t=2620-2640_f=30-200_2000fr.h5"
+    data_path: str = "raw_data/194313_t=2622.20-2639.30_f=30-200.h5"
 
     # Fraction of frames held out for validation and training
     val_split: float = 0.1
@@ -20,8 +20,8 @@ class Config:
     # Flow type used for synthetic training pair generation.
     # 'smooth' : Gaussian random field       
     # 'modes'  : sinusoidal mode superposition 
-    # 'zonal'  : zonal sinusoidal flow + turbulence     
-    # 'well'   : zonal Gaussian flow (Er well) + turbulence    
+    # 'well'   : zonal Gaussian flow (Er well) + turbulence 
+    # 'zonal'  : zonal sinusoidal flow + turbulence        
     flow_type: str = 'zonal'
 
     # Maximum pixel displacement applied when generating synthetic frame pairs.
@@ -52,7 +52,7 @@ class Config:
     is_supervised: bool = False
 
     # Total number of passes through the training data.
-    num_epochs: int = 25
+    num_epochs: int = 200
 
     # Number of frame pairs processed together in one forward/backward pass.
     batch_size: int = 32
@@ -97,7 +97,7 @@ class Config:
     # The cache is automatically invalidated when any generation setting
     # changes: flow_type, max_shift, noise_std, n_pairs_per_frame,
     # val_split, test_split, val_seed, n_test_pairs, or test_seed.
-    dataset_cache_path: str = f"synthetic_data/dataset1_{flow_type}.h5"
+    dataset_cache_path: str = f"synthetic_data/dataset_{flow_type}_maxshift_{max_shift}.h5"
 
     # Fixed seed for the VALIDATION set only.
     # Fixing this makes val-loss numbers directly comparable across runs

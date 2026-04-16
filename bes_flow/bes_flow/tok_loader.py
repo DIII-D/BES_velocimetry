@@ -1,4 +1,4 @@
-# bes_flow/tok_loadr.py 
+# bes_flow/tok_loader.py 
 
 import numpy as np
 from toksearch import Pipeline, MdsSignal
@@ -74,6 +74,7 @@ def make_images(image_data, R, Z, Ri, Zi, cpu_cores):
     and returns the array of images with shape (n_time, nZ, nR)
     """
     n_frames = image_data.shape[0]
+    print(f'\nInterpolating {n_frames} images...')
     images = np.zeros((n_frames,) + Ri.shape)
     pool = mp.Pool(np.min([n_frames, cpu_cores]))
     results = [pool.apply_async(image_interp, (R, Z, Ri, Zi, image_data[frame, :])) for frame in range(n_frames)]
@@ -91,12 +92,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Creates hdf5 file using raw BES data from Toksearch.')
     parser.add_argument('--shot', help='shot number to get the data', type=int, default=199452) #required=True)
     parser.add_argument('--times', help='time slice of interest, of form --times START STOP (in milliseconds)', type=int, nargs=2, default=[2000, 2200]) #required=True)
-    parser.add_argument('--fband', help='frequency band of interest', type=int, nargs=2 ,default=[20, 250]) #required=True)
+    parser.add_argument('--fband', help='frequency band of interest', type=int, nargs=2, default=[20, 250]) #required=True)
     parser.add_argument('--time_interp', help='time interpolation factor', type=int, default=1) #required=True)
+    parser.add_argument('--exclude_channels', help='list of channels to exclude, set to -1 for automatic search', type=int, nargs='+', default=0) #required=True)
     parser.add_argument('--cpu_cores', help='Number of CPUs for parallelism when interpolating', type=int, default=8) #required=True)
-    parser.add_argument('--res', help='image resolution after spatial interpolation', type=list, default=[40, 40]) #required=True)
-    parser.add_argument('--good-channels', help='triggers logic to filter which channels to use', default=False, type=bool, required=False)
+    parser.add_argument('--res', help='image resolution after spatial interpolation', type=int, nargs=2, default=[64, 64]) #required=True)
     parser.add_argument("--out", help="Path for output file", type=str, default=None, required=True)
+    parser.add_argument("--filter_nbi", help="Enable NBI filtering", type=bool, default=True) # set to False to diable NBI filtering
     args = parser.parse_args()
     out_dir = args.out + "/"
     
@@ -105,6 +107,7 @@ if __name__ == "__main__":
     t_interp_factor = args.time_interp  # Time interpolation factor
     cutoff_freqs = args.fband  # Frequency band of interest
     res = args.res  # image resolution after interpolation [nR, nZ]
+    print(analysis_times, cutoff_freqs, res)
     
     print(f'\nLoading BES data for #{shot}')
     raw_bes_ds = raw_bes_pipeline([shot]).compute_serial()[0]
@@ -113,7 +116,8 @@ if __name__ == "__main__":
     #print(raw_bes_ds)
     #print(filter_ds)
     # Filter and slice data
-    data_list, time_list = bf.filter_bes(raw_bes_ds, filter_ds, cutoff_freqs, analysis_times)
+    data_list, time_list = bf.filter_bes(raw_bes_ds, filter_ds, cutoff_freqs, analysis_times, 
+                                        filter_nbi=args.filter_nbi)
     print(f'Found {len(data_list)} time slices')
 
     # Get R, Z coordinates
@@ -132,15 +136,23 @@ if __name__ == "__main__":
     # For each time slice: detect bad channels, oversample signals in time, 
     # create images and save them to hdf5
     for data, time in zip(data_list, time_list):
-        fname = args.out + f'/{shot}_{time[0]:.2f}-{time[-1]:.2f}.h5'
+        fname = args.out + f'/{shot}_{time[0]:.2f}-{time[-1]:.2f}_f={cutoff_freqs[0]}-{cutoff_freqs[1]}.h5'
         print('Processing: ' + fname)
         print('t_min, t_max: ', time[0], time[-1])
         # Print std to compare with OMFIT
         #stds = np.nanstd(data, axis=1)
         #print('STD for each channel: ', stds)
         # find bad channels indices
-        bad_channels = bf.find_bad_channels(data)
-        print(f'Found bad channesl: {[ch+1 for ch in bad_channels]}') # channels numbers start from 1
+        if args.exclude_channels == 0: # use all channels
+            pass
+        elif args.exclude_channels == -1: # automatically identify da channels
+            print('Looking for bad channels...')
+            bad_channels = bf.find_bad_channels(data)
+            print(f'Found bad channesl: {[ch+1 for ch in bad_channels]}') # channels numbers start from 1
+        else:
+            print('Bad channels set by user: ', args.exclude_channels)
+            bad_channels = [i-1 for i in args.exclude_channels]
+
         # remove bad channels from data and R, Z arrays
         data = np.delete(data, bad_channels, axis=0)
         R_clean = np.delete(R, bad_channels, axis=0)
