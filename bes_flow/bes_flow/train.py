@@ -239,7 +239,7 @@ def plot_cross_flow_comparison(model, test_frames, device, cfg, output_dir):
     print(f"Saved: {path2}")
 
 
-def run_evaluation(model, test_dataset, test_frames, device, cfg, output_dir):
+def run_evaluation(model, test_dataset, test_frames, device, cfg, output_dir, plot_results=True):
     """
     Full evaluation pipeline on the held-out test set.
 
@@ -255,6 +255,7 @@ def run_evaluation(model, test_dataset, test_frames, device, cfg, output_dir):
     device       : torch.device
     cfg          : Config
     output_dir   : str — directory to save all figures
+    plot_results : bool - Flag to generate figures
 
     Returns
     -------
@@ -281,15 +282,17 @@ def run_evaluation(model, test_dataset, test_frames, device, cfg, output_dir):
     print_summary(results, cfg.flow_type, cfg.max_shift)
 
     # Figures
-    print("Generating figures...")
-    plot_metric_distributions(results, cfg.flow_type, output_dir)
-    plot_epe_vs_displacement(results, output_dir)
-    plot_spatial_error_map(flows_pred, flows_gt, output_dir)
-    plot_qualitative_examples(test_dataset.framesA, test_dataset.framesB,
-                              flows_pred, flows_gt, results, output_dir)
-    plot_cross_flow_comparison(model, test_frames, device, cfg, output_dir)
+    if plot_results:
+        print("Generating figures...")
+        plot_metric_distributions(results, cfg.flow_type, output_dir)
+        plot_epe_vs_displacement(results, output_dir)
+        plot_spatial_error_map(flows_pred, flows_gt, output_dir)
+        plot_qualitative_examples(test_dataset.framesA, test_dataset.framesB,
+                                flows_pred, flows_gt, results, output_dir)
+        plot_cross_flow_comparison(model, test_frames, device, cfg, output_dir)
 
-    print(f"\nAll evaluation figures saved to {output_dir}")
+        print(f"\nAll evaluation figures saved to {output_dir}")
+    
     return results
 
 
@@ -714,6 +717,8 @@ if __name__ == '__main__':
                         help='Load model checkpoint to start with')
     parser.add_argument('--model', type=str, default='pwc',
                         help='Model type: pwc or flownet')
+    parser.add_argument('--plot_results', action='store_true',
+                        help='Plot training loss history')
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -793,8 +798,9 @@ if __name__ == '__main__':
                 loss_fn, optimizer, scheduler,
                 cfg, device,
             )
-            plot_loss_history(loss_history, cfg)
             history_path = cfg.output_dir + f'train_history_{cfg.flow_type}.json'
+            if args.plot_results:
+                plot_loss_history(loss_history, cfg)
         # save history to json
         with open(history_path, 'w') as f:
             json.dump(loss_history, f, indent=2)
@@ -817,22 +823,24 @@ if __name__ == '__main__':
             device        = device,
             cfg           = cfg,
             output_dir    = os.path.join(cfg.output_dir, 'evaluation'),
+            plot_results  = args.plot_results,
         )
 
         # plot history
-        history_path = 'outputs/train_history_modes.json'
-        with open(history_path, 'r') as file:
-            full_history = json.load(file)
-        total = len(full_history['total'])
-        stages = [
-            {'name': 'Stage 1 — smooth flow', 'flow_type': 'smooth',
-            'epochs': total // 4, 'lr': cfg.learning_rate},
-            {'name': 'Stage 2 — sinusoidal modes',       'flow_type': 'modes',
-            'epochs': total // 4, 'lr': cfg.learning_rate / 2},
-            {'name': 'Stage 3 — zonal sin + turbulence', 'flow_type': 'zonal',
-            'epochs': total // 4, 'lr': cfg.learning_rate / 10},
-            {'name': 'Stage 4 — zonal Gauss well + turb','flow_type': 'well',
-            'epochs': total - 3 * (total // 4),'lr': cfg.learning_rate / 10},
-            ]
-        plot_curriculum_loss(full_history, stages, cfg)
+        if args.plot_results:
+            history_path = 'outputs/train_history_modes.json'
+            with open(history_path, 'r') as file:
+                full_history = json.load(file)
+            total = len(full_history['total'])
+            stages = [
+                {'name': 'Stage 1 — smooth flow', 'flow_type': 'smooth',
+                'epochs': total // 4, 'lr': cfg.learning_rate},
+                {'name': 'Stage 2 — sinusoidal modes',       'flow_type': 'modes',
+                'epochs': total // 4, 'lr': cfg.learning_rate / 2},
+                {'name': 'Stage 3 — zonal sin + turbulence', 'flow_type': 'zonal',
+                'epochs': total // 4, 'lr': cfg.learning_rate / 10},
+                {'name': 'Stage 4 — zonal Gauss well + turb','flow_type': 'well',
+                'epochs': total - 3 * (total // 4),'lr': cfg.learning_rate / 10},
+                ]
+            plot_curriculum_loss(full_history, stages, cfg)
         
