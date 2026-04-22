@@ -650,7 +650,7 @@ def curriculum_train(model, train_frames, val_frames, loss_fn, cfg, device):
         stage_cfg = replace(
             cfg,
             flow_type          = stage['flow_type'],
-            dataset_cache_path = resolve_cache_path(cfg.dataset_cache_path, cfg.flow_type),
+            dataset_cache_path = resolve_cache_path(cfg.dataset_cache_path, stage['flow_type']),
         )
 
         # Generate (or load from cache) train/val for this flow type.
