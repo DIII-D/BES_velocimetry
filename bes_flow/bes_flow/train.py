@@ -573,6 +573,16 @@ def plot_curriculum_loss(full_history, stages, cfg):
     #print(f"\nCurriculum loss plot saved to {plot_path}")
 
 
+def resolve_cache_path(base: str | None, flow_type: str) -> str | None:
+    ''' Build a per-stage cache path by inserting the flow_type before the
+    file extension. If no cache path is configured, all stages run without caching.
+    '''
+    if base is None:
+        return None
+    root, ext = os.path.splitext(base)
+    return f"{root}_{flow_type}{ext}"
+
+
 def curriculum_train(model, train_frames, val_frames, loss_fn, cfg, device):
     """
     Four-stage curriculum training, each stage on a different flow type.
@@ -616,22 +626,12 @@ def curriculum_train(model, train_frames, val_frames, loss_fn, cfg, device):
         {'name': 'Stage 1 — smooth flow',           'flow_type': 'smooth',
          'epochs': total // 4,              'lr': cfg.learning_rate},
         {'name': 'Stage 2 — sinusoidal modes',       'flow_type': 'modes',
-         'epochs': total // 4,              'lr': cfg.learning_rate / 2},
+         'epochs': total // 4,              'lr': cfg.learning_rate},
         {'name': 'Stage 3 — zonal Gauss well + turb','flow_type': 'well',
-         'epochs': total // 4,              'lr': cfg.learning_rate / 2},
+         'epochs': total // 4,              'lr': cfg.learning_rate},
         {'name': 'Stage 4 — zonal sin + turbulence', 'flow_type': 'zonal',
-         'epochs': total - 3 * (total // 4),'lr': cfg.learning_rate / 2},
+         'epochs': total - 3 * (total // 4),'lr': cfg.learning_rate},
     ]
-
-    # Build a per-stage cache path by inserting the flow_type before the
-    # file extension
-    # If no cache path is configured, all stages run without caching.
-    base_cache = getattr(cfg, 'dataset_cache_path', None)
-    def _stage_cache_path(flow_type):
-        if base_cache is None:
-            return None
-        root, ext = os.path.splitext(base_cache)
-        return f"{root}_{flow_type}{ext}"
 
     full_history = {
         'total': [], 'photometric': [], 'smoothness': [], 'laplacian': [],
@@ -650,7 +650,7 @@ def curriculum_train(model, train_frames, val_frames, loss_fn, cfg, device):
         stage_cfg = replace(
             cfg,
             flow_type          = stage['flow_type'],
-            dataset_cache_path = _stage_cache_path(stage['flow_type']),
+            dataset_cache_path = resolve_cache_path(cfg.dataset_cache_path, cfg.flow_type),
         )
 
         # Generate (or load from cache) train/val for this flow type.
@@ -663,7 +663,7 @@ def curriculum_train(model, train_frames, val_frames, loss_fn, cfg, device):
         )
         stage_train_loader, stage_val_loader, _ = make_dataloaders(
             stage_train_ds, stage_val_ds,
-            stage_val_ds,   # placeholder: test_loader is unused in train()
+            stage_val_ds,  
             stage_cfg,
         )
         
@@ -722,7 +722,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}\n")
+    print(f"\nUsing device: {device}\n")
 
     # ── Load raw BES frames ───────────────────────────────────────────────
     print(f"Loading BES frames: {cfg.data_path}")
@@ -749,16 +749,6 @@ if __name__ == '__main__':
     print(f"  Validation : {n_val}")
     print(f"  Test       : {n_test}\n")
 
-    # ── Build datasets ───────────────────────────────────────────────
-    train_dataset, val_dataset, test_dataset = make_datasets(
-        train_frames, val_frames, test_frames, cfg
-    )
-
-    # ── Build DataLoaders ─────────────────────────────────────────────────
-    train_loader, val_loader, test_loader = make_dataloaders(
-        train_dataset, val_dataset, test_dataset, cfg
-    )
-
     # ── Model ─────────────────────────────────────────────────────────────
     if args.model == 'flownet':
         print('Initializing BESFlowNetS')
@@ -766,6 +756,9 @@ if __name__ == '__main__':
     elif args.model == 'pwc':
         print('Initializing PWCNet')
         model = PWCNet(max_displacement=cfg.max_displacement)
+    
+    model = model.to(device)
+
     if args.checkpoint is not None:
         print(f"\nLoading checkpoint: {args.checkpoint}")
         model = load_model(model, args.checkpoint , device, cfg)
@@ -783,11 +776,27 @@ if __name__ == '__main__':
     if not args.skip_train:
         # ── Train ─────────────────────────────────────────────────────────────
         if args.curriculum:
+            # Curriculum train - several flow types
             loss_history = curriculum_train(
                 model, train_frames, val_frames, loss_fn, cfg, device
             )
             history_path = cfg.output_dir + 'train_history_curriculum.json'
         else:
+            # Single flow type training
+            # update dataset_cache_path in cfg
+            cfg = replace(
+                cfg,
+                dataset_cache_path = resolve_cache_path(cfg.dataset_cache_path, cfg.flow_type),
+            )
+            # ── Build datasets ───────────────────────────────────────────────
+            train_dataset, val_dataset, test_dataset = make_datasets(
+                train_frames, val_frames, test_frames, cfg
+            )
+
+            # ── Build DataLoaders ─────────────────────────────────────────────────
+            train_loader, val_loader, test_loader = make_dataloaders(
+                train_dataset, val_dataset, test_dataset, cfg
+            )
             optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer, T_max=cfg.num_epochs*1.25

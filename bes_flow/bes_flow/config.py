@@ -3,6 +3,7 @@
 # Central configuration file. ALL hyperparameters and file paths live here.
 
 from dataclasses import dataclass
+import os
 
 
 @dataclass
@@ -11,7 +12,7 @@ class Config:
     # --- Data ------------------------------------------------------------
     # Path to the NumPy array of raw BES frames, shape (N, 64, 64).
     # Each frame is a single 2-D snapshot of plasma density fluctuations.
-    data_path: str = "raw_data/194313_t=2622.20-2639.30_f=30-200.h5"
+    data_path: str = os.path.expandvars("$SCRATCH/bes_flow/raw_data/194313_t=2620-2640_f=30-200_20000fr.h5")
 
     # Fraction of frames held out for validation and training
     val_split: float = 0.1
@@ -55,7 +56,7 @@ class Config:
     num_epochs: int = 200
 
     # Number of frame pairs processed together in one forward/backward pass.
-    batch_size: int = 32
+    batch_size: int = 128 #32
 
     # Initial learning rate for the Adam optimiser.
     # The scheduler (CosineAnnealingLR) will decay this toward 0 over training.
@@ -86,10 +87,10 @@ class Config:
     # Directory where model weights are saved after each epoch.
     # Saving every epoch lets you roll back to an earlier checkpoint if
     # training diverges or if you accidentally overwrite a good model.
-    checkpoint_dir: str = "checkpoints/"
+    checkpoint_dir: str = os.path.expandvars("$SCRATCH/bes_flow/checkpoints/")
 
     # Directory for saved figures (loss curves, flow visualisations, etc.)
-    output_dir: str = "outputs/"
+    output_dir: str = os.path.expandvars("$SCRATCH/bes_flow/outputs/")
 
     # --- Dataset cache ------------------------------------------------------
     # HDF5 path for the pre-generated train / val / test dataset.
@@ -97,7 +98,7 @@ class Config:
     # The cache is automatically invalidated when any generation setting
     # changes: flow_type, max_shift, noise_std, n_pairs_per_frame,
     # val_split, test_split, val_seed, n_test_pairs, or test_seed.
-    dataset_cache_path: str = f"synthetic_data/dataset_{flow_type}_maxshift_{max_shift}.h5"
+    dataset_cache_path: str = os.path.expandvars(f"$SCRATCH/bes_flow/synthetic_data/dataset_maxshift_{max_shift}.h5")
 
     # Fixed seed for the VALIDATION set only.
     # Fixing this makes val-loss numbers directly comparable across runs
