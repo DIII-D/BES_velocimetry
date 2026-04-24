@@ -49,7 +49,7 @@ class Config:
     max_displacement: int = 4
 
     # --- Training ------------------------------------------------------------
-    # If supervised, then additional MSE loss will be used with ground truth flow
+    # If supervised, then the EPE loss will be used with ground truth flow
     is_supervised: bool = False
 
     # Total number of passes through the training data.
@@ -69,7 +69,7 @@ class Config:
     # laplacian, 2nd order derivative
     laplacian_weight: float = 0.005
 
-    # Weight of the supervised MSE term
+    # Weight of the supervised EPE term
     sup_weight: float = 0.1
 
     # Number of parallel CPU workers used to load and pre-process data.

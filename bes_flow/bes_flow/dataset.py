@@ -156,7 +156,7 @@ def zonal_plus_turbulence_flow(H, W,
         )
     
     # y-component varies with x
-    zonal_dy = np.random.uniform(0.7*zonal_amplitude, zonal_amplitude) * zonal_profile 
+    zonal_dy = np.random.choice([1, -1]) * np.random.uniform(0.7*zonal_amplitude, zonal_amplitude) * zonal_profile 
     # no radial zonal component
     zonal_dx = np.zeros(W, dtype=np.float32)       
 
