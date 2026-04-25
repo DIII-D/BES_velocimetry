@@ -353,9 +353,9 @@ def odp_chunk(image_slice, nsteps, smooth_param, m_frame, mx_init, my_init):
                     temp_y[k, y_index] = (temp_y1[k] + temp_y2[k]) / 2.0 - iy[k]
 
             if y_steps > 1:
-                denom_y = nx - y_width - 1.0
+                denom_y = np.float32(nx - y_width - 1.0)
                 if denom_y > 0.0:
-                    mid_y = np.arange(nx - y_width, dtype=np.float32) / np.float32(denom_y * (y_steps - 1.0))
+                    mid_y = np.arange(nx - y_width, dtype=np.float32) / denom_y * np.float32(y_steps - 1.0)
                 else:
                     mid_y = np.zeros(nx - y_width, dtype=np.float32)
                     
@@ -392,7 +392,7 @@ def odp_chunk(image_slice, nsteps, smooth_param, m_frame, mx_init, my_init):
                         cy[ii, jj] = iy2d[ii, jj] + vy_out[ii, jj, frame]
                 image_warp[:, :, i] = map_coordinates(image_slice[:, :, frame + i], cx, cy)
 
-# ODP in x-direction
+            # ODP in x-direction
             x_steps = int(2.0 * ny / x_width - 1.0)
             temp_x = np.zeros((nx, x_steps), dtype=np.float32)
 
@@ -423,9 +423,9 @@ def odp_chunk(image_slice, nsteps, smooth_param, m_frame, mx_init, my_init):
                     temp_x[k, x_index] = (temp_x1[k] + temp_x2[k]) / 2.0 - ix[k]
 
             if x_steps > 1:
-                denom_x = ny - x_width - 1.0
+                denom_x = np.float32(ny - x_width - 1.0)
                 if denom_x > 0.0:
-                    mid_x = np.arange(ny - x_width, dtype=np.float32) / np.float32(denom_x * (x_steps - 1.0))
+                    mid_x = np.arange(ny - x_width, dtype=np.float32) / denom_x * np.float32(x_steps - 1.0)
                 else:
                     mid_x = np.zeros(ny - x_width, dtype=np.float32)
                     
