@@ -17,6 +17,7 @@ class Config:
     # Fraction of frames held out for validation and training
     val_split: float = 0.1
     test_split: float = 0.1
+    test_seed: int = 42   # fixed seed for reproducible test generation
 
     # Flow type used for synthetic training pair generation.
     # 'smooth' : Gaussian random field       
@@ -50,7 +51,7 @@ class Config:
 
     # --- Training ------------------------------------------------------------
     # If supervised, then the EPE loss will be used with ground truth flow
-    is_supervised: bool = False
+    is_supervised: bool = False  #Fasle
 
     # Total number of passes through the training data.
     num_epochs: int = 200
@@ -65,7 +66,7 @@ class Config:
     # Smoothness regularisation weights
     # See loss.py for the exact formulation.
     # total variation, 1st order derivative
-    smooth_weight: float = 0.002
+    smooth_weight: float = 0.02  # 0.02-0.05 for supervised? 0.002 for unsupervised
     # laplacian, 2nd order derivative
     laplacian_weight: float = 0.005
 
@@ -75,14 +76,7 @@ class Config:
     # Number of parallel CPU workers used to load and pre-process data.
     # Set to 0 to load data in the main process (useful for debugging).
     num_workers: int = 8
-
-    # --- Test / evaluation -----------------------------------------------
-    # Number of synthetic pairs used for final evaluation on the test set.
-    # These are generated once with a fixed seed (test_seed) and never used
-    # during training.
-    n_test_pairs: int = 300
-    test_seed:    int = 42       # fixed seed for reproducible test generation
-    
+     
     # --- Output -------------------------------------------------------------
     # Directory where model weights are saved after each epoch.
     # Saving every epoch lets you roll back to an earlier checkpoint if

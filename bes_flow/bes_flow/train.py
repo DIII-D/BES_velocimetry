@@ -434,7 +434,7 @@ def train(model, train_loader, val_loader, loss_fn, optimizer, scheduler,
         )
 
         # Per-epoch checkpoint
-        if epoch % 5 == 0:
+        if epoch % 1 == 0:
             torch.save(
                 model.state_dict(),
                 os.path.join(cfg.checkpoint_dir, f"model_{cfg.flow_type}_epoch_{epoch:04d}.pt"),
@@ -815,6 +815,12 @@ if __name__ == '__main__':
         # save history to json
         with open(history_path, 'w') as f:
             json.dump(loss_history, f, indent=2)
+    else:
+        # if skipping training, still set up proper cache path
+        cfg = replace(
+                cfg,
+                dataset_cache_path = resolve_cache_path(cfg.dataset_cache_path, cfg.flow_type),
+            )
     
     # ── Evaluate on the test set ──────────────────────────────────────────
     # get test data
@@ -826,7 +832,7 @@ if __name__ == '__main__':
         best_ckpt = args.checkpoint
     else:
         # Load the best checkpoint (lowest val EPE during training)
-        best_ckpt = f'checkpoints/model_{cfg.flow_type}_best.pt'
+        best_ckpt = os.path.expandvars(f"$SCRATCH/bes_flow/checkpoints/model_{cfg.flow_type}_best.pt")
     print(f"\nLoading best checkpoint for evaluation: {best_ckpt}")
     model = load_model(model, best_ckpt, device, cfg)
 
