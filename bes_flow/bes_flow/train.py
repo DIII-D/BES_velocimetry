@@ -434,7 +434,7 @@ def train(model, train_loader, val_loader, loss_fn, optimizer, scheduler,
         )
 
         # Per-epoch checkpoint
-        if epoch % 1 == 0:
+        if epoch % 5 == 0:
             torch.save(
                 model.state_dict(),
                 os.path.join(cfg.checkpoint_dir, f"model_{cfg.flow_type}_epoch_{epoch:04d}.pt"),
@@ -801,7 +801,7 @@ if __name__ == '__main__':
             )
             optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=cfg.num_epochs*1.25
+                optimizer, T_max=cfg.num_epochs
             )
             print("Starting single-stage training...\n")
             loss_history = train(

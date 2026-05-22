@@ -24,7 +24,7 @@ class Config:
     # 'modes'  : sinusoidal mode superposition 
     # 'well'   : zonal Gaussian flow (Er well) + turbulence 
     # 'zonal'  : zonal sinusoidal flow + turbulence        
-    flow_type: str = 'zonal'
+    flow_type: str = 'mixed'
 
     # Maximum pixel displacement applied when generating synthetic frame pairs.
     # Drawn uniformly from [-max_shift, +max_shift] pixels in both x and y.
@@ -38,7 +38,7 @@ class Config:
     # Number of synthetic pairs generated per real BES frame.
     # Total training pairs = len(train_frames) * n_pairs_per_frame.
     # Increase to enlarge the dataset without needing more real frames.
-    n_pairs_per_frame: int = 2
+    n_pairs_per_frame: int = 1
 
     # --- Model --------------------------------------------------------------
     # Number of channels in the shared CNN encoder output feature maps.
@@ -54,10 +54,10 @@ class Config:
     is_supervised: bool = False  #Fasle
 
     # Total number of passes through the training data.
-    num_epochs: int = 200
+    num_epochs: int = 100
 
     # Number of frame pairs processed together in one forward/backward pass.
-    batch_size: int = 128 #32
+    batch_size: int = 256 #32
 
     # Initial learning rate for the Adam optimiser.
     # The scheduler (CosineAnnealingLR) will decay this toward 0 over training.
