@@ -25,7 +25,8 @@ Run training
 module load pytroch
 python -m bes_flow.train --model 'pwc'
 ```
-Training script picks up the dataset from cache based on the parameters in config. If `cfg.flow_type=='mixed'`, then the dataset should be generated with generate_mixed_dataset.py separately. If `cfg.flow_type in ['smooth', 'modes', 'well', 'zonal']`, then the dataset will be generated automatically when runnning train.py.
+Training script picks up the dataset from cache based on the parameters in config. If `cfg.flow_type=='mixed'`, then the dataset should be generated with generate_mixed_dataset.py separately. 
+If `cfg.flow_type in ['smooth', 'modes', 'well', 'zonal']`, then the dataset will be generated automatically when runnning train.py and will contain frame pairs with a single flow type. For more details on different flow types see `dataset.py.`
 
 Compare different methods
 ```
