@@ -1,22 +1,21 @@
-[project]
-name = "bes-velocimetry"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = ["h5py", "matplotlib", "nvtx"]
-
 [build-system]
-requires = ["setuptools >= 77.0.3"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "bes_flow"
+version = "0.1.0"
+description = "Convolutional neural networks for BES optical flow estimation"
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=2.0",
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "h5py",
+]
 
-[project.scripts]
-bes-velocimetry = "bes_velocimetry:main_para"
-bes-hello = "bes_velocimetry:main"
-
-[tool.ruff]
-exclude = []
-line-length = 120
-indent-width = 4
-target-version = "py310"
+[tool.setuptools.packages.find]
+# Tells setuptools to look for packages in the project root.
+# It will find bes_flow/ because it contains __init__.py.
+where = ["."]

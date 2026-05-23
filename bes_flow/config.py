@@ -51,7 +51,7 @@ class Config:
 
     # --- Training ------------------------------------------------------------
     # If supervised, then the EPE loss will be used with ground truth flow
-    is_supervised: bool = False  #Fasle
+    is_supervised: bool = False 
 
     # Total number of passes through the training data.
     num_epochs: int = 100
