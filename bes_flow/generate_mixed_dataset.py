@@ -20,7 +20,7 @@ from bes_flow.config import cfg
 from bes_flow.train import resolve_cache_path
 
 
-# The four flow types that make up the mixed dataset, in curriculum order.
+# The four flow types that make up the mixed dataset
 FLOW_TYPES = ['smooth', 'modes', 'well', 'zonal']
  
 def _generate_pairs(frames, flow_types, n_pairs_per_frame,
