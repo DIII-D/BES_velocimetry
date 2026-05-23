@@ -3,6 +3,7 @@
 Neural networks for optical flow for Beam Emission Spectroscopy (BES) plasma diagnostics.
 
 ## How to run
+Install the package
 `pip install -e .`
 
 Generate raw BES images
@@ -24,7 +25,7 @@ Run training
 module load pytroch
 python -m bes_flow.train --model 'pwc'
 ```
-Training script picks up the dataset from cache based on the parameters in config. If cfg.flow_type=='mixed', then the dataset should be generated with generate_mixed_dataset.py separately. If cfg.flow_type in ['smooth', 'modes', 'well', 'zonal'], then the dataset will be generated automatically when runnning train.py.
+Training script picks up the dataset from cache based on the parameters in config. If `cfg.flow_type=='mixed'`, then the dataset should be generated with generate_mixed_dataset.py separately. If `cfg.flow_type in ['smooth', 'modes', 'well', 'zonal']`, then the dataset will be generated automatically when runnning train.py.
 
 Compare different methods
 ```
