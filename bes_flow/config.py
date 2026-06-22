@@ -40,6 +40,15 @@ class Config:
     # Increase to enlarge the dataset without needing more real frames.
     n_pairs_per_frame: int = 1
 
+    # Number of semi-Lagrangian RK2 steps used to advect frame A into
+    # frame B during synthetic pair generation (see dataset.advect_image).
+    #   1  : legacy single-step warp 
+    #   >1 : the generated field is treated as a steady velocity field;
+    #        frame B is produced by multi-step advection and the ground
+    #        truth is the consistently integrated forward displacement.
+    # 4 sub-steps keep the per-step displacement <= ~2 px for max_shift=8.
+    n_warp_steps: int = 4
+
     # --- Model --------------------------------------------------------------
     # Number of channels in the shared CNN encoder output feature maps.
     feature_channels: int = 32
