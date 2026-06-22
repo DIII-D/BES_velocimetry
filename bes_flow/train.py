@@ -26,7 +26,30 @@ from bes_flow.dataset import make_datasets, make_dataloaders, generate_dataset, 
 from bes_flow.metrics import (compute_all_metrics, print_summary,
                                plot_metric_distributions, plot_epe_vs_displacement,
                                plot_spatial_error_map, plot_qualitative_examples)
-from bes_flow.predict import load_model
+
+
+def load_model(model, weights_path, device, cfg=cfg):
+    """
+    Instantiate the network and load trained weights from a checkpoint file.
+
+    Parameters
+    ----------
+    model : your model
+    weights_path : str         — path to a .pt checkpoint saved by train.py
+    device       : torch.device
+    cfg          : Config      — must match the config used during training
+                                 (feature_channels, max_displacement)
+
+    Returns
+    -------
+    model : updated model
+    """
+    # Load the saved weight dictionary.
+    state_dict = torch.load(weights_path, map_location=device, weights_only=True)
+    model.load_state_dict(state_dict)
+    print(f"Loaded weights from {weights_path}")
+    print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
+    return model
 
 
 def predict_dataset(model, dataset, device, batch_size=16):
