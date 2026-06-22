@@ -66,7 +66,7 @@ class Config:
     # Smoothness regularisation weights
     # See loss.py for the exact formulation.
     # total variation, 1st order derivative
-    smooth_weight: float = 0.02  # 0.02-0.05 for supervised? 0.002 for unsupervised
+    smooth_weight: float = 0.002 #0.02  # 0.02-0.05 for supervised? 0.002 for unsupervised
     # laplacian, 2nd order derivative
     laplacian_weight: float = 0.005
 
