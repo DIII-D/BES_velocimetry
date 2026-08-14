@@ -560,7 +560,30 @@ if __name__ == '__main__':
                         help='Model type: pwc or flownet')
     parser.add_argument('--plot_results', action='store_true',
                         help='Plot training loss history')
+
+    parser.add_argument('--smooth_weight', type=float, default=None,
+                        help='Override cfg.smooth_weight (for hyperparameter scans)')
+    parser.add_argument('--laplacian_weight', type=float, default=None,
+                        help='Override cfg.laplacian_weight (for hyperparameter scans)')
+    parser.add_argument('--checkpoint_dir', type=str, default=None,
+                        help='Override cfg.checkpoint_dir (for hyperparameter scans)')
+    parser.add_argument('--output_dir', type=str, default=None,
+                        help='Override cfg.output_dir (for hyperparameter scans)')
     args = parser.parse_args()
+
+    # Apply CLI overrides to the shared config
+    _overrides = {}
+    if args.smooth_weight is not None:
+        _overrides['smooth_weight'] = args.smooth_weight
+    if args.laplacian_weight is not None:
+        _overrides['laplacian_weight'] = args.laplacian_weight
+    if args.checkpoint_dir is not None:
+        _overrides['checkpoint_dir'] = os.path.expandvars(args.checkpoint_dir)
+    if args.output_dir is not None:
+        _overrides['output_dir'] = os.path.expandvars(args.output_dir)
+    if _overrides:
+        cfg = replace(cfg, **_overrides)
+        print(f"Config overrides from CLI: {_overrides}")
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"\nUsing device: {device}\n")
