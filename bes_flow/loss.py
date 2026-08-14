@@ -11,10 +11,21 @@
 # In addition to the photometric term, we add a smoothness penalty
 # that discourages the network from producing jagged, discontinuous flow fields.
 #
+# PHYSICS-INFORMED TERM: the continuity equation
+#   dI/dt + div(I*v) = 0
+# The photometric/warping term above implicitly assumes brightness
+# constancy, which holds only for INCOMPRESSIBLE flow (div v = 0). That is
+# a good model for the mean poloidal ExB flow below the ion sound speed,
+# but NOT for the drift-wave turbulence BES actually resolves: those
+# fluctuations are compressible, with intensity sources and sinks.
+# The continuity residual is the correct generalization - it permits
+# compression consistent with the observed intensity change, 
+# and reduces to brightness constancy when div v = 0.
+# See WarpingL2Loss.continuity_loss for the two available discretisations.
+#
 # If synthetic training data WITH known ground-truth displacements is
 # available (generated in dataset.py), an optional supervised EPE term
 # against the ground truth can be included to accelerate convergence.
-#
 # Reference: UnFlow (Meister et al., AAAI 2018)
 
 import torch
@@ -34,12 +45,21 @@ class WarpingL2Loss(nn.Module):
                     if True - supervised training: EPE on flow + smoothness
     """
     def __init__(self, smooth_weight=0.01, laplacian_weight=0.05,
-                 sup_weight=0.1, is_supervised=False):
+                 sup_weight=0.1, continuity_weight=0.0,
+                 continuity_form='lagrangian', is_supervised=False):
         super().__init__()
         self.smooth_weight = smooth_weight
         self.sup_weight = sup_weight
         self.laplacian_weight = laplacian_weight
+        self.continuity_weight = continuity_weight
+        self.continuity_form = continuity_form
         self.is_supervised = is_supervised
+ 
+        if continuity_form not in ('lagrangian', 'eulerian'):
+            raise ValueError(
+                f"continuity_form must be 'lagrangian' or 'eulerian', "
+                f"got {continuity_form!r}"
+            )
 
     def warp(self, frame, flow):
         """
@@ -93,7 +113,6 @@ class WarpingL2Loss(nn.Module):
         return F.grid_sample(frame, displaced_grid,
                              align_corners=True, padding_mode='border')
 
-
     def charbonnier(self, x, eps=1e-3):
         '''
         The Charbonnier photometric loss sqrt(x² + ε²) with ε ≈ 0.001 
@@ -140,11 +159,140 @@ class WarpingL2Loss(nn.Module):
         
         return tv, laplacian
 
-
+    def _divergence(self, flow):
+        """
+        div(v) = du/dx + dv/dy on interior grid points, via central
+        differences.
+ 
+        Both partials are cropped along the perpendicular axis so they are
+        evaluated at the SAME set of interior points before being summed.
+ 
+        Parameters
+        ----------
+        flow : (B, 2, H, W) — channel 0 = dx (u), channel 1 = dy (v),
+               in pixel-displacement units per frame interval
+ 
+        Returns
+        -------
+        (B, 1, H-2, W-2)
+        """
+        u = flow[:, 0:1, :, :]
+        v = flow[:, 1:2, :, :]
+        du_dx = (u[:, :, 1:-1, 2:] - u[:, :, 1:-1, :-2]) / 2.0
+        dv_dy = (v[:, :, 2:, 1:-1] - v[:, :, :-2, 1:-1]) / 2.0
+        return du_dx + dv_dy
+ 
+    def _jacobian_det(self, flow):
+        """
+        det(I + grad D) for the displacement field D, on interior points.
+ 
+        For the flow map Phi(x) = x + D(x), exact mass conservation reads
+ 
+            I_B(Phi(x)) * det(grad Phi(x))  =  I_A(x)
+ 
+        and grad Phi = I + grad D, so in 2-D
+ 
+            det = (1 + du/dx)(1 + dv/dy) - (du/dy)(dv/dx).
+ 
+        This is the FINITE-displacement statement. Linearizing it gives
+        det ~= 1 + div(D), which is only valid for |grad D| << 1. At
+        max_shift = 12 px that linearization is badly violated: on the
+        synthetic data div(D) has mean magnitude ~0.04-0.13 even though
+        the underlying velocity field is divergence-free and the
+        flow map is volume-preserving (det = 1 to ~0.3%).
+ 
+        Returns
+        -------
+        (B, 1, H-2, W-2)
+        """
+        u = flow[:, 0:1, :, :]
+        v = flow[:, 1:2, :, :]
+        du_dx = (u[:, :, 1:-1, 2:] - u[:, :, 1:-1, :-2]) / 2.0
+        du_dy = (u[:, :, 2:, 1:-1] - u[:, :, :-2, 1:-1]) / 2.0
+        dv_dx = (v[:, :, 1:-1, 2:] - v[:, :, 1:-1, :-2]) / 2.0
+        dv_dy = (v[:, :, 2:, 1:-1] - v[:, :, :-2, 1:-1]) / 2.0
+        return (1.0 + du_dx) * (1.0 + dv_dy) - du_dy * dv_dx
+ 
+    def continuity_loss(self, frameA, frameB, flow, frameB_warped=None):
+        """
+        Physics-informed residual of the plasma continuity equation
+ 
+            dI/dt + div(I * v) = 0
+ 
+        where I is the measured BES intensity (a proxy for local density)
+        and v is the flow field.
+ 
+        Two discretisations are available.
+ 
+        'lagrangian'  (default, recommended)
+            Exact finite-displacement mass conservation along
+            trajectories - the integrated form of dI/dt + div(I v) = 0:
+ 
+                I_B(x + D) * det(I + grad D)  -  I_A(x)
+ 
+            Being an integrated (not linearized) statement, this is valid
+            for arbitrarily large displacement and inherits the warp's
+            tolerance of the ~12 px shifts used here.
+ 
+        'eulerian'
+            The literal flux-divergence form:
+ 
+                (I_B - I_A)  +  d(I_bar*u)/dx + d(I_bar*v)/dy
+ 
+            written in conservative (flux) form rather than expanded as
+            I div(v) + v.grad(I), so that it is discretely conservative.
+            I_bar = 0.5*(I_A + I_B) time-centres the flux. This is a
+            LINEARIZATION, valid only for |v| <~ 1 px; expect it to be
+            dominated by O(|v|^2) truncation error at large max_shift.
+ 
+        Note on units: v is in pixels per frame interval and the grid
+        spacing is 1 pixel, so dt = 1 and dx = dy = 1  — no
+        additional scaling is required.
+ 
+        Parameters
+        ----------
+        frameA, frameB : (B, 1, H, W) — consecutive frames
+        flow           : (B, 2, H, W) — predicted displacement field
+        frameB_warped  : (B, 1, H, W) or None — pass the already-computed
+                         warp from the photometric term to avoid a second
+                         grid_sample call
+ 
+        Returns
+        -------
+        scalar — Charbonnier norm of the continuity residual over
+                 interior pixels
+        """
+        if self.continuity_form == 'lagrangian':
+            if frameB_warped is None:
+                frameB_warped = self.warp(frameB, flow)
+ 
+            det_J = self._jacobian_det(flow)            # (B, 1, H-2, W-2)
+ 
+            # I_B(x + D) * det(I + grad D)  -  I_A(x)
+            residual = (frameB_warped[:, :, 1:-1, 1:-1] * det_J
+                        - frameA[:, :, 1:-1, 1:-1])
+ 
+        else:  # 'eulerian'
+            dI_dt = (frameB - frameA)[:, :, 1:-1, 1:-1]
+            I_bar = 0.5 * (frameA + frameB)             # (B, 1, H, W)
+ 
+            # Conservative flux form: F = I * v, then take div(F)
+            Fx = I_bar * flow[:, 0:1, :, :]
+            Fy = I_bar * flow[:, 1:2, :, :]
+            dFx_dx = (Fx[:, :, 1:-1, 2:] - Fx[:, :, 1:-1, :-2]) / 2.0
+            dFy_dy = (Fy[:, :, 2:, 1:-1] - Fy[:, :, :-2, 1:-1]) / 2.0
+ 
+            residual = dI_dt + dFx_dx + dFy_dy
+ 
+        # Charbonnier rather than plain L2: this is a data-fidelity
+        # residual on noisy detector intensities, so it should be robust
+        # to outliers in the same way the photometric term is.
+        return self.charbonnier(residual)
+ 
     def forward(self, frameA, frameB, flow, flow_gt=None):
         """
         Compute the total training loss.
-
+ 
         Parameters
         ----------
         frameA  : (B, 1, H, W) — reference frame (target of the warp)
@@ -152,45 +300,62 @@ class WarpingL2Loss(nn.Module):
         flow    : (B, 2, H, W) — network's predicted displacement field
         flow_gt : (B, 2, H, W) or None
                   Ground-truth flow
-
+ 
         Returns
         -------
         total        : scalar — total weighted loss (used for backprop)
         photo_loss   : scalar — photometric term alone (logged separately)
         smooth_loss  : scalar — smoothness term alone (logged separately)
+        cont_loss    : scalar — continuity-equation residual (logged separately)
         """
         if self.is_supervised:
             assert flow_gt is not None, \
                 "flow_gt must be provided in supervised mode"
             
             sup_loss = self.epe_loss(flow, flow_gt)
-
+ 
             # Smoothness applied to residual (flow_pred - flow_gt):
             smooth_loss, _ = self.smoothness_loss(flow, flow_gt)
-
+ 
+            # Continuity is a residual on (frames, flow), independent of
+            # supervision, so it applies here too. No warped frame is
+            # available to reuse in this branch.
+            cont_loss = self.continuity_loss(frameA, frameB, flow)
+ 
             # Zero out unused terms for consistent logging
             laplacian_loss = flow.new_zeros(())
             photo_loss = flow.new_zeros(())
             
-            total = sup_loss * self.sup_weight + smooth_loss * self.smooth_weight
-
+            total = (sup_loss * self.sup_weight
+                     + smooth_loss * self.smooth_weight
+                     + self.continuity_weight * cont_loss)
+ 
         else: # unsupervised
             # Warp frameB toward frameA using the predicted flow.
             frameB_warped = self.warp(frameB, flow)
-
+ 
             # Photometric loss
             photo_loss = self.charbonnier(frameA - frameB_warped)
-
+ 
             # Smoothness penalty on the predicted flow field
             smooth_loss, laplacian_loss = self.smoothness_loss(flow, flow_gt)
-
+ 
+            # Continuity residual. Reuse frameB_warped so the Lagrangian
+            # form costs one extra grid_sample of zero.
+            cont_loss = self.continuity_loss(
+                frameA, frameB, flow, frameB_warped=frameB_warped
+            )
+ 
             sup_loss = flow.new_zeros(())
-
-            total = photo_loss + self.smooth_weight * smooth_loss + self.laplacian_weight * laplacian_loss
+ 
+            total = (photo_loss
+                     + self.smooth_weight * smooth_loss
+                     + self.laplacian_weight * laplacian_loss
+                     + self.continuity_weight * cont_loss)
         
-        return total, photo_loss, smooth_loss, laplacian_loss, sup_loss
-
-
+        return total, photo_loss, smooth_loss, laplacian_loss, sup_loss, cont_loss
+ 
+ 
 def iterative_warping_loss(frameA, frameB, flow_predictions, criterion, flow_gt, gamma = 0.8):
     """
     gamma-weighted photometric loss over a sequence of flow predictions.
@@ -212,8 +377,9 @@ def iterative_warping_loss(frameA, frameB, flow_predictions, criterion, flow_gt,
  
     Returns
     -------
-    total, photo, smooth, laplacian, sup : scalar tensors
-        Weighted sums of each loss component
+    total, photo, smooth, laplacian, sup, cont : scalar tensors
+        Weighted sums of each loss component, matching the return signature of
+        WarpingL2Loss.forward() for a drop-in replacement in the training loop.
     """
     import torch
  
@@ -224,12 +390,13 @@ def iterative_warping_loss(frameA, frameB, flow_predictions, criterion, flow_gt,
     smooth_acc   = torch.zeros(1, device=frameA.device)
     lap_acc      = torch.zeros(1, device=frameA.device)
     sup_acc      = torch.zeros(1, device=frameA.device)
+    cont_acc     = torch.zeros(1, device=frameA.device)
  
     for i, flow in enumerate(flow_predictions):
         # Weight: earlier iterations get lower weight, last iteration gets 1.0
         weight = gamma ** (T - 1 - i)
  
-        loss, photo, smooth, lap, sup = criterion(
+        loss, photo, smooth, lap, sup, cont = criterion(
             frameA, frameB, flow, flow_gt=flow_gt
         )
  
@@ -238,7 +405,9 @@ def iterative_warping_loss(frameA, frameB, flow_predictions, criterion, flow_gt,
         smooth_acc = smooth_acc + weight * smooth
         lap_acc    = lap_acc    + weight * lap
         sup_acc    = sup_acc    + weight * sup
+        cont_acc   = cont_acc   + weight * cont
  
     # Return scalars (squeeze the dummy batch dim we used for in-place addition)
     return (total_acc.squeeze(), photo_acc.squeeze(),
-            smooth_acc.squeeze(), lap_acc.squeeze(), sup_acc.squeeze())
+            smooth_acc.squeeze(), lap_acc.squeeze(), sup_acc.squeeze(),
+            cont_acc.squeeze())
