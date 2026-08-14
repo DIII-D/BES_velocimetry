@@ -251,11 +251,11 @@ def warp_image(image, flow):
     src_y = y_coords - flow[1]   # flow[1] = dy
     src_x = x_coords - flow[0]   # flow[0] = dx
 
-    # Cubic interpolation (order=3)
+    # Bilinear interpolation (order=1)
     warped = map_coordinates(
         image,
         [src_y.ravel(), src_x.ravel()],
-        order=3,
+        order=1,
         mode='nearest',
     ).reshape(H, W)
 
@@ -314,9 +314,9 @@ def advect_image(image, velocity, n_steps=4):
         x        = x - dt * vxm
         y        = y - dt * vym
  
-    # Single cubic interpolation of the image at the final foot points
+    # Single bilinear interpolation of the image at the final foot points
     warped = map_coordinates(
-        image, [y.ravel(), x.ravel()], order=3, mode='nearest',
+        image, [y.ravel(), x.ravel()], order=1, mode='nearest',
     ).reshape(H, W)
  
     return warped.astype(np.float32)
