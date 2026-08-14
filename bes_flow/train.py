@@ -190,6 +190,9 @@ def plot_cross_flow_comparison(model, test_frames, device, cfg, output_dir):
                   'EPE  vx  (px)', 'EPE  vy  (px)']
  
     for row, (ft, fA, fB, gt, pred, epe_val) in enumerate(samples):
+        # Common colour scale — both frames share the same vmin/vmax 
+        vmin = min(fA.min(), fB.min())
+        vmax = max(fA.max(), fB.max())
         # Per-component errors (H, W)
         #epe_vx = np.abs(pred[0] - gt[0])   # |Δdx|
         #epe_vy = np.abs(pred[1] - gt[1])   # |Δdy|
@@ -204,14 +207,14 @@ def plot_cross_flow_comparison(model, test_frames, device, cfg, output_dir):
  
         # col 0 — Frame A
         ax0 = fig.add_subplot(gs[row, 0])
-        ax0.imshow(fA, cmap='inferno', origin='upper')
+        ax0.imshow(fA, cmap='inferno', origin='upper', vmin=vmin, vmax=vmax)
         ax0.set_ylabel(f'{ft}\nEPE={epe_val:.3f} px', fontsize=12)
         if row == 0:  ax0.set_title(col_titles[0])
         ax0.set_xticks([]);  ax0.set_yticks([])
  
         # col 1 — Frame B with GT flow quiver
         ax1 = fig.add_subplot(gs[row, 1])
-        ax1.imshow(fB, cmap='inferno', origin='upper')
+        ax1.imshow(fB, cmap='inferno', origin='upper', vmin=vmin, vmax=vmax)
         ax1.quiver(xx, yy, gt[0][yy, xx], -gt[1][yy, xx],
                    color='cyan', scale=60, scale_units='width',
                    width=0.005, headwidth=4)
@@ -220,7 +223,7 @@ def plot_cross_flow_comparison(model, test_frames, device, cfg, output_dir):
  
         # col 2 — Frame B with predicted flow quiver
         ax2 = fig.add_subplot(gs[row, 2])
-        ax2.imshow(fB, cmap='inferno', origin='upper')
+        ax2.imshow(fB, cmap='inferno', origin='upper', vmin=vmin, vmax=vmax)
         ax2.quiver(xx, yy, pred[0][yy, xx], -pred[1][yy, xx],
                    color='yellow', scale=60, scale_units='width',
                    width=0.005, headwidth=4)
