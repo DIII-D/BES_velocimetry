@@ -79,54 +79,62 @@ def _unit_rms(flow):
     return flow / rms
  
  
-def add_compressible_component(flow_sol, compressible_fraction,
-                              smoothing_sigma=16.0):
+def make_turbulence_compressible(flow_turb, compressible_fraction,
+                                 smoothing_sigma=16.0):
     """
-    Helmholtz mixing: combine a solenoidal field with a fresh curl-free
-    (dilatational) field so that a controlled fraction of the RMS kinetic
-    energy lives in the compressive part.
+    Replace a solenoidal TURBULENT component with a mixed
+    solenoidal + compressible one of the same RMS magnitude.
  
-        v = sqrt(1 - chi) * v_sol_hat  +  sqrt(chi) * v_pot_hat
+        v_turb' = |v_turb|_rms * ( sqrt(1-chi) * v_turb_hat
+                                 + sqrt(chi)   * grad(phi)_hat )
  
-    with each component normalised to unit RMS magnitude first, so that
-    chi is the dilatational fraction of RMS energy.
+    The mean poloidal ExB flow is divergence-free below the ion sound
+    speed; it is the drift-wave turbulence riding on top of it that is
+    compressible. Attaching chi to the turbulence makes it a single
+    consistent physical knob across all four generators.
  
-    chi = 0 reproduces the divergence-free case
+    Preserving the turbulent RMS also means the total flow's amplitude
+    statistics are unchanged by chi, so no global renormalisation is
+    needed - switching chi on does not perturb max_shift or the random
+    zonal-amplitude draw.
  
-    Physics note
-    ------------
-    Drift-wave turbulence is only weakly compressible in the perpendicular
-    plane, so realistic chi is SMALL. Choose it by calibrating the induced
-    per-frame intensity change against the measured dI/I of the real
-    signal -- see compression_diagnostics(). Large chi produces
-    unphysically violent brightening/dimming.
+    NOTE Drift-wave turbulence is predominantly solenoidal (ExB
+    dominant) with only a weak compressible correction.
  
     Parameters
     ----------
-    flow_sol              : (2, H, W) — solenoidal field from any of the
-                            existing generators
-    compressible_fraction : chi in [0, 1] — dilatational energy fraction
-    smoothing_sigma       : coherence length of the potential field (px);
-                            match the solenoidal generator's scale
+    flow_turb             : (2, H, W) — solenoidal turbulent component
+    compressible_fraction : chi in [0, 1] — dilatational fraction of the
+                            TURBULENT energy
+    smoothing_sigma       : coherence length of the potential field (px).
+                            Should MATCH the generator that produced
+                            flow_turb so the two components live 
+                            at the same scale.
  
     Returns
     -------
-    flow : (2, H, W) float32 — mixed field, NOT yet magnitude-normalised
+    (2, H, W) float32 — same RMS magnitude as the input
     """
     chi = float(np.clip(compressible_fraction, 0.0, 1.0))
     if chi <= 0.0:
-        return flow_sol.astype(np.float32)
+        return flow_turb.astype(np.float32)
  
-    _, H, W = flow_sol.shape
+    _, H, W = flow_turb.shape
+    rms_in = np.sqrt((flow_turb**2).sum(axis=0).mean()) + 1e-8
+ 
     phi = gaussian_filter(
         np.random.randn(H, W).astype(np.float32), sigma=smoothing_sigma
     )
     flow_pot = grad_from_potential(phi)
  
-    mixed = (np.sqrt(1.0 - chi) * _unit_rms(flow_sol)
+    mixed = (np.sqrt(1.0 - chi) * _unit_rms(flow_turb)
              + np.sqrt(chi) * _unit_rms(flow_pot))
-    return mixed.astype(np.float32)
-
+ 
+    # Restore the original turbulent RMS so total flow amplitude is
+    # unaffected by chi.
+    return (mixed * (rms_in / (np.sqrt((mixed**2).sum(axis=0).mean()) + 1e-8))
+            ).astype(np.float32)
+ 
  
 def normalize_flow(flow, max_shift, low=0.7):
     """
@@ -142,7 +150,7 @@ def normalize_flow(flow, max_shift, low=0.7):
     return (flow * scale).astype(np.float32)
 
 
-def random_smooth_flow(H, W, max_shift=6.0, smoothing_sigma=8.0):
+def random_smooth_flow(H, W, max_shift=6.0, smoothing_sigma=16.0):
     """
     Generate a smooth random divergence-free displacement field from a
     Gaussian-random-field stream function.
@@ -226,7 +234,7 @@ def sinusoidal_modes(H, W, n_modes=8, max_shift=6.0):
 def zonal_plus_turbulence_flow(H, W,
                                zonal_amplitude=4.0,
                                turbulence_amplitude=2.0,
-                               turbulence_sigma=6.0,
+                               turbulence_sigma=16.0,
                                profile_type='well',
                                well_pos=0.5,
                                well_width=0.125,):
@@ -583,33 +591,28 @@ def compression_diagnostics(H, W, flow_type, max_shift,
     }
 
  
-def _generate_flow(H, W, flow_type, max_shift):
+def _generate_flow(H, W, flow_type, max_shift, compressible_fraction=0.0):
     """
     Dispatch to the selected flow generator.
-  
-    compressible_fraction (chi) adds a curl-free component carrying chi
-    of the RMS kinetic energy. chi = 0 (default) reproduces the original
-    strictly divergence-free behaviour. The mix is applied BEFORE the
-    final magnitude normalisation so that max_shift still means what it
-    says.
+ 
+    compressible_fraction (chi) makes the TURBULENT component partially
+    compressible, carrying chi of the turbulent kinetic energy. The mean
+    (zonal) component is left divergence-free.
     """
+ 
     if flow_type == 'smooth':
-        flow = random_smooth_flow(H, W, max_shift)
+        # No mean component: the whole field is turbulence.
+        flow_mean = 0.0
+        flow_turb = random_smooth_flow(H, W, max_shift)
     elif flow_type == 'modes':
-        flow = sinusoidal_modes(H, W, max_shift=max_shift)
-    elif flow_type == 'zonal':
-        flow, _, _ = zonal_plus_turbulence_flow(
+        flow_mean = 0.0
+        flow_turb = sinusoidal_modes(H, W, max_shift=max_shift)
+    elif flow_type in ('zonal', 'well'):
+        _, flow_mean, flow_turb = zonal_plus_turbulence_flow(
             H, W,
             zonal_amplitude      = max_shift,
             turbulence_amplitude = max_shift * 0.3,
-            profile_type         = 'sin',
-        )
-    elif flow_type == 'well':
-        flow, _, _ = zonal_plus_turbulence_flow(
-            H, W,
-            zonal_amplitude      = max_shift,
-            turbulence_amplitude = max_shift * 0.3,
-            profile_type         = 'well',
+            profile_type         = 'sin' if flow_type == 'zonal' else 'well',
         )
     else:
         raise ValueError(
@@ -618,12 +621,11 @@ def _generate_flow(H, W, flow_type, max_shift):
         )
  
     if compressible_fraction > 0.0:
-        flow = add_compressible_component(flow, compressible_fraction)
-        # Re-normalise: the Helmholtz mix used unit-RMS components, so the
-        # peak magnitude must be restored to the requested max_shift.
-        flow = normalize_flow(flow, max_shift)
+        flow_turb = make_turbulence_compressible(
+            flow_turb, compressible_fraction,
+        )
  
-    return flow
+    return (flow_mean + flow_turb).astype(np.float32)
     
 
 def generate_dataset(frames, n_pairs_per_frame, max_shift,
@@ -631,11 +633,11 @@ def generate_dataset(frames, n_pairs_per_frame, max_shift,
                     compressible_fraction=0.0):
     """
     Generate the full synthetic dataset once and return numpy arrays.
-
+ 
     Each real frame is used to produce n_pairs_per_frame synthetic pairs
     with independent random flow fields, giving a total of
     N * n_pairs_per_frame training examples.
-
+ 
     Parameters
     ----------
     frames            : (N, H, W) float array — real BES frames
@@ -650,7 +652,7 @@ def generate_dataset(frames, n_pairs_per_frame, max_shift,
                              velocity field; frame B is produced by
                              multi-step advection and flow_gt is the
                              consistently integrated forward displacement.
-
+ 
     Returns
     -------
     framesA  : (N*n_pairs, 1, H, W) float32
@@ -659,15 +661,15 @@ def generate_dataset(frames, n_pairs_per_frame, max_shift,
     """
     N, H, W  = frames.shape
     n_total  = N * n_pairs_per_frame
-
+ 
     framesA  = np.zeros((n_total, 1, H, W), dtype=np.float32)
     framesB  = np.zeros((n_total, 1, H, W), dtype=np.float32)
     flows_gt = np.zeros((n_total, 2, H, W), dtype=np.float32)
-
+ 
     print(f"  Generating {n_total} pairs "
           f"({N} frames x {n_pairs_per_frame} pairs, "
           f"flow='{flow_type}', warp_steps={n_warp_steps})...")
-
+ 
     idx = 0
     for i, frame in enumerate(frames):
         image = frame.astype(np.float32)
@@ -719,8 +721,8 @@ def generate_dataset(frames, n_pairs_per_frame, max_shift,
     mem_mb = (framesA.nbytes + framesB.nbytes + flows_gt.nbytes) / 1e6
     print(f"  Done — {n_total} pairs, ~{mem_mb:.1f} MB in memory")
     return framesA, framesB, flows_gt
-
-
+ 
+ 
 def _make_metadata(cfg):
     """
     Build a dict of the settings that determine dataset content.
@@ -741,8 +743,8 @@ def _make_metadata(cfg):
         # invalidates any cached incompressible dataset.
         'compressible_fraction': float(getattr(cfg, 'compressible_fraction', 0.0)),
     }
-
-
+ 
+ 
 def save_dataset_cache(path, 
                        train_A, train_B, train_flows,
                        val_A, val_B, val_flows, 
@@ -750,7 +752,7 @@ def save_dataset_cache(path,
                        metadata):
     """
     Save pre-generated arrays and metadata to an HDF5 file.
-
+ 
     Parameters
     ----------
     path            : str  -- file path, e.g. 'data/cache/dataset_zonal.h5'
@@ -762,7 +764,7 @@ def save_dataset_cache(path,
     dirpath = os.path.dirname(path)
     if dirpath:
         os.makedirs(dirpath, exist_ok=True)
-
+ 
     with h5py.File(path, 'w') as f:
         for grp_name, A, B, flows in (
             ('train', train_A, train_B, train_flows),
@@ -773,24 +775,24 @@ def save_dataset_cache(path,
             grp.create_dataset('framesA',  data=A,     compression='gzip', compression_opts=4)
             grp.create_dataset('framesB',  data=B,     compression='gzip', compression_opts=4)
             grp.create_dataset('flows_gt', data=flows, compression='gzip', compression_opts=4)
-
+ 
         # Metadata as typed HDF5 attributes on a dedicated group
         meta_grp = f.create_group('metadata')
         for key, value in metadata.items():
             meta_grp.attrs[key] = value
-
+ 
     size_mb = os.path.getsize(path) / 1e6
     print(f"  Cache saved -> {path}  ({size_mb:.1f} MB on disk)")
-
-
+ 
+ 
 def load_dataset_cache(path):
     """
     Load pre-generated arrays from an HDF5 cache file.
-
+ 
     Parameters
     ----------
     path : str -- path to .h5 cache file
-
+ 
     Returns
     -------
     train_A, train_B, train_flows : training arrays
@@ -808,7 +810,7 @@ def load_dataset_cache(path):
         test_A      = f['test/framesA'][:]
         test_B      = f['test/framesB'][:]
         test_flows  = f['test/flows_gt'][:]
-
+ 
         # Read attributes back into a Python dict.
         metadata = {}
         for key, value in f['metadata'].attrs.items():
@@ -816,19 +818,19 @@ def load_dataset_cache(path):
                 metadata[key] = value.item()   # numpy scalar -> Python int/float
             else:
                 metadata[key] = value          # strings pass through unchanged
-
+ 
     return (train_A, train_B, train_flows,
             val_A,   val_B,   val_flows,
             test_A,  test_B,  test_flows,
             metadata)
-
-
+ 
+ 
 def _cache_is_valid(path, cfg):
     """
     Check whether a cache file exists AND was generated with the same
     settings as the current cfg.
     Reads only the /metadata attributes.
-
+ 
     Returns
     -------
     (is_valid : bool, reason : str)
@@ -850,9 +852,9 @@ def _cache_is_valid(path, cfg):
             }
     except Exception as e:
         return False, f"Cache file unreadable: {e}"
-
+ 
     current = _make_metadata(cfg)
-
+ 
     # Compare each field individually
     for key, current_val in current.items():
         cached_val = metadata.get(key)
@@ -861,9 +863,9 @@ def _cache_is_valid(path, cfg):
                 f"'{key}' mismatch: cached={cached_val!r}, "
                 f"current={current_val!r}"
             )
-
+ 
     return True, "ok"
-    
+
 
 class BESDataset(Dataset):
     """
@@ -1160,8 +1162,8 @@ if __name__ == "__main__":
         val_split          : float = 0.1
         test_split         : float = 0.1
         max_shift          : float = 12.0
-        noise_std          : float = 0.02
-        flow_type          : str   = 'mixed'
+        noise_std          : float = 0.0
+        flow_type          : str   = 'modes'
         batch_size         : int   = 4
         num_workers        : int   = 0
         n_pairs_per_frame  : int   = 1
