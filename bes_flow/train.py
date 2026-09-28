@@ -184,7 +184,7 @@ def plot_cross_flow_comparison(model, test_frames, device, cfg, output_dir):
     fig.suptitle('Qualitative examples across flow types  —  one random pair per type',
                  fontsize=16, fontweight='bold')
  
-    gs = gridspec.GridSpec(n_rows, 5, figure=fig, hspace=0.35, wspace=0.25)
+    gs = gridspec.GridSpec(n_rows, 5, figure=fig, hspace=0.25, wspace=0.25)
  
     col_titles = ['Frame A', 'Frame B  +  GT flow', 'Frame B  +  pred flow',
                   'EPE  vx  (px)', 'EPE  vy  (px)']
@@ -217,7 +217,7 @@ def plot_cross_flow_comparison(model, test_frames, device, cfg, output_dir):
         ax1.imshow(fB, cmap='inferno', origin='upper', vmin=vmin, vmax=vmax)
         ax1.quiver(xx, yy, gt[0][yy, xx], -gt[1][yy, xx],
                    color='cyan', scale=60, scale_units='width',
-                   width=0.005, headwidth=4)
+                   width=0.01, headwidth=4)
         if row == 0:  ax1.set_title(col_titles[1])
         ax1.set_xticks([]);  ax1.set_yticks([])
  
@@ -226,7 +226,7 @@ def plot_cross_flow_comparison(model, test_frames, device, cfg, output_dir):
         ax2.imshow(fB, cmap='inferno', origin='upper', vmin=vmin, vmax=vmax)
         ax2.quiver(xx, yy, pred[0][yy, xx], -pred[1][yy, xx],
                    color='yellow', scale=60, scale_units='width',
-                   width=0.005, headwidth=4)
+                   width=0.01, headwidth=4)
         if row == 0:  ax2.set_title(col_titles[2])
         ax2.set_xticks([]);  ax2.set_yticks([])
  

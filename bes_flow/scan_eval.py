@@ -24,8 +24,9 @@ from bes_flow.train import load_model, run_evaluation, resolve_cache_path
 
 # ── Hyperparameter grid — keep in sync with hyperparam_scan_array.sh ───────
 MODELS         = ['flownet', 'pwc']   
-SMOOTH_WEIGHTS = [0.0, 0.001, 0.002, 0.004, 0.008, 0.016, 0.032]
-LAP_WEIGHTS    = [0.0, 0.0025, 0.005, 0.01, 0.02, 0.04, 0.08]
+SMOOTH_WEIGHTS = [0.0, 0.001, 0.002, 0.004, 0.008] # 0.016, 0.032]
+LAP_WEIGHTS    = [0.0, 0.01, 0.02, 0.04, 0.08, 0.16]
+CONT_WEIGHTS   = [0.0]
 CKPT_ROOT      = os.path.expandvars("$SCRATCH/bes_flow/checkpoints/scan")
 OUT_DIR        = os.path.expandvars("$SCRATCH/bes_flow/outputs/scan")
 # ─────────────────────────────────────────────────────────────────────────
@@ -121,33 +122,34 @@ if __name__ == '__main__':
     for model_name in MODELS:
         for i, sw in enumerate(SMOOTH_WEIGHTS):
             for j, lw in enumerate(LAP_WEIGHTS):
-                run_name  = f"{model_name}_sw{sw}_lw{lw}"
-                ckpt_path = os.path.join(
-                    CKPT_ROOT, run_name, f'model_{cfg_local.flow_type}_best.pt'
-                )
+                for k, cw in enumerate(CONT_WEIGHTS):
+                    run_name  = f"{model_name}_sw{sw}_lw{lw}_cw{cw}"
+                    ckpt_path = os.path.join(
+                        CKPT_ROOT, run_name, f'model_{cfg_local.flow_type}_best.pt'
+                    )
 
-                if not os.path.exists(ckpt_path):
-                    print(f"[skip] {run_name}: no checkpoint at {ckpt_path}")
-                    continue
+                    if not os.path.exists(ckpt_path):
+                        print(f"[skip] {run_name}: no checkpoint at {ckpt_path}")
+                        continue
 
-                print(f"\n── {run_name} ──")
-                model = model_builders[model_name]().to(device)
-                model = load_model(model, ckpt_path, device, cfg_local)
+                    print(f"\n── {run_name} ──")
+                    model = model_builders[model_name]().to(device)
+                    model = load_model(model, ckpt_path, device, cfg_local)
 
-                results = run_evaluation(
-                    model,
-                    test_dataset = test_dataset,
-                    test_frames  = test_frames,
-                    device       = device,
-                    cfg          = cfg_local,
-                    output_dir   = os.path.join(OUT_DIR, run_name),
-                    plot_results = False,  # skip per-run figures, only need the scalar EPE
-                )
-                epe_grid[model_name][i, j] = results['EPE'].mean()
+                    results = run_evaluation(
+                        model,
+                        test_dataset = test_dataset,
+                        test_frames  = test_frames,
+                        device       = device,
+                        cfg          = cfg_local,
+                        output_dir   = os.path.join(OUT_DIR, run_name),
+                        plot_results = False,  # skip per-run figures, only need the scalar EPE
+                    )
+                    epe_grid[model_name][i, j] = results['EPE'].mean()
 
-                del model
-                if device.type == 'cuda':
-                    torch.cuda.empty_cache()
+                    del model
+                    if device.type == 'cuda':
+                        torch.cuda.empty_cache()
 
     # Save the raw grid so the heatmap can be replotted without rerunning inference
     np.savez(
