@@ -76,7 +76,7 @@ class Config:
     #   0.010       7.7 %        3.0 %       2.8 %
     #   0.020       8.3 %        4.2 %       3.9 %
     #   0.050      16.1 %        6.0 %       5.9 %
-    compressible_fraction: float = 0.02
+    compressible_fraction: float = 0.0
 
     # --- Model --------------------------------------------------------------
     # Number of channels in the shared CNN encoder output feature maps.
@@ -117,7 +117,7 @@ class Config:
     # The residual is O(intensity), i.e. the same scale as the photometric
     # term, so this weight is naturally O(0.1-1) - much larger than
     # smooth_weight/laplacian_weight, which penalise flow derivatives.
-    continuity_weight: float = 0.1
+    continuity_weight: float = 0.0
  
     # Discretisation of the continuity residual:
     #   'lagrangian' : DI/Dt + I*div(v), using the warped frame.
@@ -149,7 +149,7 @@ class Config:
     # The cache is automatically invalidated when any generation setting
     # changes: flow_type, max_shift, noise_std, n_pairs_per_frame,
     # val_split, test_split, val_seed, n_test_pairs, or test_seed.
-    dataset_cache_path: str = os.path.expandvars(f"$SCRATCH/bes_flow/synthetic_data/dataset_maxshift_{max_shift}.h5")
+    dataset_cache_path: str = os.path.expandvars(f"$SCRATCH/bes_flow/synthetic_data/dataset_maxshift_{max_shift}_chi_{compressible_fraction}.h5")
 
     # Fixed seed for the VALIDATION set only.
     # Fixing this makes val-loss numbers directly comparable across runs

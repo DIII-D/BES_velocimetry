@@ -415,7 +415,7 @@ def train(model, train_loader, val_loader, loss_fn, optimizer, scheduler,
                     f"Photo: {photo.item():.5f}  "
                     f"Smooth: {smooth.item():.5f}  "
                     f"Lapl: {lap.item():.5f}  "
-                    f"Cont: {cont.item():.5f}"
+                    f"Cont: {cont.item():.5f}  "
                     f"Sup: {sup.item():.5f}"
                 )
 
@@ -439,10 +439,10 @@ def train(model, train_loader, val_loader, loss_fn, optimizer, scheduler,
                 flow_pred = model(frameA, frameB)
                 # check if supervised
                 if cfg.is_supervised:
-                    loss, _, _, _, _ = loss_fn(frameA, frameB, flow_pred,
+                    loss, _, _, _, _, _ = loss_fn(frameA, frameB, flow_pred,
                                             flow_gt=flow_gt)
                 else:
-                    loss, _, _, _, _ = loss_fn(frameA, frameB, flow_pred,
+                    loss, _, _, _, _, _ = loss_fn(frameA, frameB, flow_pred,
                                             flow_gt=None)
                 val_loss_sum += loss.item()
                 # End point error: per-pixel Euclidean distance, 
@@ -571,6 +571,8 @@ if __name__ == '__main__':
                         help='Override cfg.smooth_weight (for hyperparameter scans)')
     parser.add_argument('--laplacian_weight', type=float, default=None,
                         help='Override cfg.laplacian_weight (for hyperparameter scans)')
+    parser.add_argument('--continuity_weight', type=float, default=None,
+                        help='Override cfg.continuity_weight (for hyperparameter scans)')
     parser.add_argument('--checkpoint_dir', type=str, default=None,
                         help='Override cfg.checkpoint_dir (for hyperparameter scans)')
     parser.add_argument('--output_dir', type=str, default=None,
@@ -583,6 +585,8 @@ if __name__ == '__main__':
         _overrides['smooth_weight'] = args.smooth_weight
     if args.laplacian_weight is not None:
         _overrides['laplacian_weight'] = args.laplacian_weight
+    if args.continuity_weight is not None:
+        _overrides['continuity_weight'] = args.continuity_weight
     if args.checkpoint_dir is not None:
         _overrides['checkpoint_dir'] = os.path.expandvars(args.checkpoint_dir)
     if args.output_dir is not None:
