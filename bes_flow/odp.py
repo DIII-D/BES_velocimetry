@@ -76,7 +76,7 @@ import h5py
 import re
 
 @njit(nogil=True)
-def residual(strip, m, window):
+def residual(strip, strip_warp, m, window):
     n = strip.shape[0]
     w_len = strip.shape[1]
     m_frame = strip.shape[2]
@@ -84,14 +84,16 @@ def residual(strip, m, window):
     res = np.full((n, n), 1.0e10, dtype=np.float32)
     
     for i in range(n):
-        start_j = max(m - i - 1, i - m + 1)
-        end_j = min(i + m - 1, 2 * n - m - i - 1)
+        #start_j = max(m - i - 1, i - m + 1)
+        #end_j = min(i + m - 1, 2 * n - m - i - 1)
+        start_j = max(m - i, i - m)
+        end_j   = min(i + m, 2 * (n - 1) - m - i) # was 2*n
         
         for j in range(start_j, end_j + 1):
             val = 0.0
             for k in range(m_frame - 1):
                 for w_idx in range(w_len):
-                    val += window[w_idx] * abs(strip[i, w_idx, k] - strip[j, w_idx, k + 1])
+                    val += window[w_idx] * abs(strip[i, w_idx, k] - strip_warp[j, w_idx, k + 1])
             res[i, j] = val
             
     return res
@@ -99,12 +101,15 @@ def residual(strip, m, window):
 @njit(nogil=True)
 def optimal_path(res, m, n):
     arf = np.full((n, n), 1.0e10, dtype=np.float32)
-    for i in range(m):
-        arf[m - i - 1, i] = 0.0
+    #for i in range(m):
+    #    arf[m - i - 1, i] = 0.0
+    # zero out start line
+    for i in range(m + 1):
+        arf[m - i, i] = 0.0
         
-    for k in range(m, n):
-        for q in range(m - 1):
-            i = k - q - 1
+    for k in range(m, n - 1): #range(m, n):
+        for q in range(m): #range(m - 1):
+            i = k - q #- 1
             j = k - m + q + 1
             arf[i, j] = min(
                 arf[i, j-1] + res[i, j-1] + res[i, j],
@@ -112,21 +117,25 @@ def optimal_path(res, m, n):
                 arf[i-1, j] + res[i-1, j] + res[i, j]
             )
 
-        for q in range(m):
-            i = k - q
-            j = k - m + q + 1
+        for q in range(m + 1): #range(m):
+            i = k - q + 1
+            j = k - m + q + 1 # was 0
             arf[i, j] = min(
                 arf[i, j-1] + res[i, j-1] + res[i, j],
                 arf[i-1, j-1] + 2.0 * (res[i-1, j-1] + res[i, j]),
                 arf[i-1, j] + res[i-1, j] + res[i, j]
             )
 
-    arf_end_line = np.zeros(m, dtype=np.float32)
-    for idx_m in range(m):
-        arf_end_line[idx_m] = arf[n - m + idx_m, n - 1 - idx_m]
+    # Proicess end line
+    #arf_end_line = np.zeros(m, dtype=np.float32)
+    arf_end_line = np.zeros(m + 1, dtype=np.float32)
+    for idx_m in range(m + 1): #range(m):
+        #arf_end_line[idx_m] = arf[n - m + idx_m, n - 1 - idx_m]
+        arf_end_line[idx_m] = arf[n - 1 - m + idx_m, n - 1 - idx_m]
     i_min = np.argmin(arf_end_line)
 
-    i_temp = n - m + i_min
+    #i_temp = n - m + i_min
+    i_temp = n - 1 - m + i_min
     j_temp = n - 1 - i_min
 
     max_len = 4 * n 
@@ -336,8 +345,9 @@ def odp_chunk(image_slice, nsteps, smooth_param, m_frame, mx_init, my_init):
                 start_x = int(y_index * y_width / 2.0)
                 end_x = min(start_x + y_width, nx)
                 
-                strip = np.ascontiguousarray(np.transpose(image_warp[start_x:end_x, :, :], (1, 0, 2)))
-                res = residual(strip, my, window_y)
+                strip = np.ascontiguousarray(np.transpose(image_slice[start_x:end_x, :, frame : frame + m_frame], (1, 0, 2)))
+                strip_warp = np.ascontiguousarray(np.transpose(image_warp[start_x:end_x, :, :], (1, 0, 2)))
+                res = residual(strip, strip_warp, my, window_y)
                 i_coord, j_coord = optimal_path(res, my, ny)
 
                 temp_y1 = np.zeros(ny, dtype=np.float32)
@@ -406,8 +416,9 @@ def odp_chunk(image_slice, nsteps, smooth_param, m_frame, mx_init, my_init):
                 start_y = int(x_index * x_width / 2.0)
                 end_y = min(start_y + x_width, ny)
                 
-                strip = np.ascontiguousarray(image_warp[:, start_y:end_y, :])
-                res = residual(strip, mx, window_x)
+                strip = np.ascontiguousarray(image_slice[:, start_y:end_y, frame : frame + m_frame])
+                strip_warp = np.ascontiguousarray(image_warp[:, start_y:end_y, :])
+                res = residual(strip, strip_warp, mx, window_x)
                 i_coord, j_coord = optimal_path(res, mx, nx)
 
                 temp_x1 = np.zeros(nx, dtype=np.float32)
@@ -462,6 +473,8 @@ def odp_chunk(image_slice, nsteps, smooth_param, m_frame, mx_init, my_init):
                         cy[ii, jj] = iy2d[ii, jj] + vy_out[ii, jj, frame]
                 image_warp[:, :, i] = map_coordinates(image_slice[:, :, frame + i], cx, cy)
             
+            #if frame // 100 == 0:
+            #    print(f"frame: {frame} | smooth: {sm_param} | mx: {mx} | my: {my}")
             # update strip widths and smoothing params
             x_width = max(int(x_width / math.sqrt(2.0) + 0.5), 5)
             y_width = max(int(y_width / math.sqrt(2.0) + 0.5), 5)
