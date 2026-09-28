@@ -371,7 +371,7 @@ def plot_metric_bars(all_results, all_times=None, output_dir=None):
         ('EPE',  'EPE  (px)',  1.0),
         ('rEPE', 'rEPE  (%)', 100.0),
         ('AE',   'AE  (deg)', 1.0),
-        ('Fl',   'Fl  (%)',   100.0),
+        #('Fl',   'Fl  (%)',   100.0),
     ]
 
     n_panels = len(display) + (1 if all_times else 0)
@@ -417,6 +417,7 @@ def plot_metric_bars(all_results, all_times=None, output_dir=None):
         ax.set_ylabel('ms / pair')
         ax.set_title('Speed  (ms/pair)')
         ax.grid(True, alpha=0.3, axis='y')
+        ax.set_ylim((0, 1.15*max(ms_per_pair)))
 
     plt.tight_layout()
     if output_dir is not None:
@@ -428,9 +429,9 @@ def plot_metric_bars(all_results, all_times=None, output_dir=None):
     
 
 def plot_comparison_examples(framesA, framesB, flows_gt, all_flows,
-                             n_examples=3, output_dir=None):
+                             n_examples=3, quiver_scale=60, output_dir=None):
     """
-    Grid figure: one row per randomly chosen test pair.
+    Grid figure: one row per chosen test pair.
 
     Columns:
       Frame A | Frame B + GT quiver | <one column per method>
@@ -444,8 +445,8 @@ def plot_comparison_examples(framesA, framesB, flows_gt, all_flows,
 
     n_pairs = len(framesA)
     rng     = np.random.default_rng(seed=0)
-    indices = rng.choice(n_pairs, size=min(n_examples, n_pairs), replace=False)
-    indices = [5, 10, 50, 100]
+    #indices = rng.choice(n_pairs, size=min(n_examples, n_pairs), replace=False)
+    indices = [10, 20, 40, 80]
 
     H, W   = framesA.shape[2], framesA.shape[3]
     qs     = 8
@@ -458,19 +459,19 @@ def plot_comparison_examples(framesA, framesB, flows_gt, all_flows,
     n_rows = len(indices)
 
     fig1 = plt.figure(figsize=(3.2 * n_cols, 3.2 * n_rows))
-    fig1.suptitle('Qualitative comparison  - random test pairs',
+    fig1.suptitle('Qualitative comparison  - selected test pairs',
                   fontsize=12, fontweight='bold')
     gs1 = gridspec.GridSpec(n_rows, n_cols, figure=fig1,
                            hspace=0.35, wspace=0.25)
     
     fig2 = plt.figure(figsize=(3.2 * (n_cols-2), 3.2 * n_rows))
-    fig2.suptitle('Qualitative comparison  - random test pairs',
+    fig2.suptitle('Qualitative comparison  - selected test pairs',
                   fontsize=12, fontweight='bold')
     gs2 = gridspec.GridSpec(n_rows, 2*(n_cols-2), figure=fig2,
                            hspace=0.15, wspace=0.25)
     
     fig3 = plt.figure(figsize=(3.2 * (n_cols-2), 3.2 * n_rows))
-    fig3.suptitle('Mean Vy flow comparison  - random test pairs',
+    fig3.suptitle('Mean Vy flow comparison  - selected test pairs',
                   fontsize=12, fontweight='bold')
     gs3 = gridspec.GridSpec(n_rows, (n_cols-2), figure=fig3,
                            hspace=0.35, wspace=0.25)
@@ -509,8 +510,8 @@ def plot_comparison_examples(framesA, framesB, flows_gt, all_flows,
         ax = fig1.add_subplot(gs1[row, col1]);  col1 += 1
         ax.imshow(fB, cmap='inferno', origin='lower', vmin=vmin, vmax=vmax)
         ax.quiver(xx, yy, gt[0][yy, xx], gt[1][yy, xx],
-                  color='cyan', scale=60, scale_units='width',
-                  width=0.005, headwidth=4)
+                  color='cyan', scale=quiver_scale, scale_units='width',
+                  width=0.01, headwidth=4)
         if row == 0:  ax.set_title('GT flow', fontsize=10)
         ax.set_xticks([]);  ax.set_yticks([])
 
@@ -547,6 +548,7 @@ def plot_comparison_examples(framesA, framesB, flows_gt, all_flows,
             ax   = fig3.add_subplot(gs3[row, col3])
             ax.plot(np.mean(gt[1], axis=0), color='k', lw=2, label='GT')
             ax.plot(np.mean(pred[1], axis=0), color='r', lw=2, label='Pred')
+            ax.axhline(0, 0, 65, linestyle='--', color='k')
             if row == 0:  ax.set_title(m, fontsize=10)
             if row == n_rows-1: ax.set_xlabel('x (px)', fontsize=10)
             if col3 == 0: 
@@ -682,7 +684,7 @@ if __name__ == '__main__':
 
     # ── Figures ───────────────────────────────────────────────────────────
     print("Plotting figures...")
-    plot_metric_bars(all_results, all_times)
-    plot_comparison_examples(test_A, test_B, flows_gt, all_flows)
+    plot_metric_bars(all_results, all_times, output_dir=args.output)
+    plot_comparison_examples(test_A, test_B, flows_gt, all_flows, output_dir=args.output)
 
     print(f"\nDone. " ) 
